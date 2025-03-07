@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics and Highlighting (v2.2 Sensitive AI)
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (Fractional Weights)
 // @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics. This version increases sensitivity for AI signals by raising weights and adding a syntactic complexity check. Flagged elements are highlighted and a popup shows detection details.
+// @version      2.2.1
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements and displays a popup with details.
 // @author       
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -11,7 +11,7 @@
 
 (function() {
     'use strict';
-    
+
     /***********************
      * CONFIGURATION
      ***********************/
@@ -54,33 +54,33 @@
     const commentTextMap = new Map();
 
     /***********************
-     * ADVANCED AI DETECTION HEURISTICS (Increased Sensitivity)
+     * ADVANCED AI DETECTION HEURISTICS (Fractional Weights)
      ***********************/
     function computeAIScore(text) {
         let score = 0;
         let lowerText = text.toLowerCase();
-        
+
         // Heuristic 1: Explicit AI disclaimers (strong signal)
         if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
-            score += 3;
+            score += 1.9;
         }
-        
+
         // Heuristic 2: Lack of contractions in long texts
         let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 2;  // Increased from 1 to 2
+            score += 1.2;
         }
-        
+
         // Heuristic 3: Formal filler phrases
         const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
         aiPhrases.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1;
+                score += 1.1;
             }
         });
-        
+
         // Heuristic 4: Common AI indicator phrases
         const aiIndicators = [
             "i do not have personal experiences",
@@ -95,29 +95,29 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 2;  // Increased from 1 to 2
+                score += 1.3;
             }
         });
-        
-        // Heuristic 5: Repetitiveness and burstiness.
+
+        // Heuristic 5: Repetitiveness / low burstiness
         let sentences = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length > 1) {
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (variance < 4) { // Uniform sentence lengths indicate formulaic output
-                score += 2;  // Increased from 1 to 2
+            if (variance < 4) { // very uniform sentence lengths
+                score += 1.5;
             }
         }
-        
-        // Heuristic 6: Lexical Diversity.
+
+        // Heuristic 6: Lexical Diversity
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 2;  // Increased from 1 to 2
+            score += 1.4;
         }
-        
-        // Heuristic 7: Bigram Uniqueness.
+
+        // Heuristic 7: Bigram Uniqueness
         function getBigrams(arr) {
             let bigrams = [];
             for (let i = 0; i < arr.length - 1; i++) {
@@ -130,10 +130,10 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 2;  // Increased from 1 to 2
+                score += 1.3;
             }
         }
-        
+
         // Additional Heuristic: Syntactic Complexity via punctuation variability.
         function computeSyntaxScore(text) {
             let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
@@ -141,10 +141,10 @@
             let punctuationMatches = text.match(/[,\;:\-]/g);
             let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
             let avgPunctuation = punctuationCount / sentences.length;
-            return avgPunctuation < 1 ? 1 : 0;
+            return avgPunctuation < 1 ? 1.1 : 0;
         }
         score += computeSyntaxScore(text);
-        
+
         return score;
     }
 
@@ -173,7 +173,7 @@
                 score++;
             }
         }
-        
+
         let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
         genericResponses.forEach(phrase => {
             if (textContent === phrase) {
@@ -195,7 +195,7 @@
                 score++;
             }
         }
-        
+
         const links = elem.querySelectorAll('a');
         links.forEach(link => {
             if (scamLinkRegex.test(link.href)) {
@@ -365,5 +365,5 @@
     setInterval(() => {
         scanForBots(document);
     }, 3000);
-    
+
 })();
