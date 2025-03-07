@@ -1,38 +1,38 @@
-# RedditAIBotBuster
+# Reddit AI BotBuster
 Reddit AI BotBuster is a userscript that spots potential bots and AI posts on Reddit. It scans as you browse, highlighting suspicious content with color-coded outlines and shows a popup with usernames and snippets.
 
 ## Description
 
-Reddit AI BotBuster is a userscript that highlights potential bot and AI-generated posts on Reddit. It uses advanced heuristics to detect suspicious content and marks them with color-coded outlines so you can easily spot anomalies in your feed.
+This Tampermonkey userscript scans Reddit pages in real time for posts and comments that exhibit AI- or bot-like characteristics. Using advanced heuristics with fractional weights, the script analyzes features like explicit AI disclaimers, lack of contractions, repetitive sentence structure (low burstiness), reduced lexical diversity, and low bigram uniqueness. It further enhances detection with basic semantic coherence, proper noun consistency, context shift, and syntactic complexity analyses.
 
-## Installation Guide
+A unique feature of this version is that it factors in the user's account age—if a user’s account is less than **2 months old**, a small penalty is applied, increasing the likelihood of flagging very new accounts. Flagged elements are outlined (red for bot-like, blue for AI-like, purple for mixed signals), and a persistent popup in the top-right corner shows a count and details of all flagged items.
+
+## Installation & Usage
 
 1. **Install Tampermonkey:**  
-   Add the Tampermonkey extension to your browser (available for Chrome, Firefox, etc.).
+   Add the [Tampermonkey extension](https://www.tampermonkey.net/) to your browser.
 
 2. **Create a New Script:**  
-   Click the Tampermonkey icon and choose "Create a new script".
+   Click the Tampermonkey icon, select “Create a new script…”, and delete any pre-filled code.
 
-3. **Paste the Code:**  
-   Delete any sample code in the editor and paste the script from this repository.
+3. **Paste the Script Code:**  
+   Copy the entire script code (from the file provided) and paste it into the editor.
 
-4. **Save and Enable:**  
-   Save the script and ensure it's enabled in Tampermonkey.
+4. **Save & Enable:**  
+   Save the script and ensure it is enabled. Then, reload Reddit pages.
 
-5. **Reload Reddit:**  
-   Visit or reload a Reddit page. The script will scan your feed and highlight posts/comments that look suspicious.
+5. **View Results:**  
+   The script will scan posts and comments dynamically. Flagged items will be highlighted, and you can click the popup in the top-right to view details.
 
-## How It Works
+## Notes
 
-- **Red Outline:** Bot-like content  
-- **Blue Outline:** AI-generated content  
-- **Purple Outline:** Both Bot and AI signals detected  
-- A popup in the top-right displays a live count and details of flagged content.
+- **Threshold & Weights:**  
+  The detection threshold is set to 5. Fractional weights were tuned to reduce false positives while still capturing suspicious AI-like patterns.
 
-## Contributing
+- **Dynamic Content:**  
+  The script uses a MutationObserver and a periodic scan (every 3 seconds) to handle new and expanding content.
 
-Feel free to fork the repo and suggest improvements or new features!
+- **Further Adjustments:**  
+  You can tweak the weights or threshold directly in the script if needed.
 
-## License
-
-This project is licensed under the MIT License.
+Enjoy a more authentic Reddit experience with enhanced detection of automated and AI-generated content!
