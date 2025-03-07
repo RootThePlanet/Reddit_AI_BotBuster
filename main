@@ -1,9 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (Fractional Weights)
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.4 FP Reduced Further)
 // @namespace    http://tampermonkey.net/
-// @version      2.2.1
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements and displays a popup with details.
-// @author       
+// @version      2.4
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements and displays a popup with details. Adjustments made to further reduce false positives.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -15,13 +14,14 @@
     /***********************
      * CONFIGURATION
      ***********************/
-    const RED_FLAG_THRESHOLD = 4;  // Total score threshold for highlighting
+    // Increased threshold to 5 to reduce false positives.
+    const RED_FLAG_THRESHOLD = 5;
 
     // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
         /bot/i,                               // Any username containing "bot"
         /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // e.g., "Vacuum-Wonder7569"
-        /^[A-Za-z]+[A-Za-z]+\d+$/,             // Similar to default names missing hyphen
+        /^[A-Za-z]+[A-Za-z]+\d+$/,             // Names without hyphen
         /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // e.g., "MariaJamesss"
     ];
 
@@ -54,7 +54,7 @@
     const commentTextMap = new Map();
 
     /***********************
-     * ADVANCED AI DETECTION HEURISTICS (Fractional Weights)
+     * ADVANCED AI DETECTION HEURISTICS (Fractional Weights, Reduced Sensitivity)
      ***********************/
     function computeAIScore(text) {
         let score = 0;
@@ -65,23 +65,23 @@
             score += 1.9;
         }
 
-        // Heuristic 2: Lack of contractions in long texts
+        // Heuristic 2: Lack of contractions in long texts.
         let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1.2;
+            score += 1.0;  // Reduced from 1.2 to 1.0
         }
 
-        // Heuristic 3: Formal filler phrases
+        // Heuristic 3: Formal filler phrases.
         const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
         aiPhrases.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1.1;
+                score += 0.5;  // Reduced from 1.1 to 0.5
             }
         });
 
-        // Heuristic 4: Common AI indicator phrases
+        // Heuristic 4: Common AI indicator phrases.
         const aiIndicators = [
             "i do not have personal experiences",
             "my training data",
@@ -95,29 +95,29 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1.3;
+                score += 0.8;  // Reduced from 1.3 to 0.8
             }
         });
 
-        // Heuristic 5: Repetitiveness / low burstiness
+        // Heuristic 5: Repetitiveness / low burstiness.
         let sentences = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length > 1) {
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (variance < 4) { // very uniform sentence lengths
-                score += 1.5;
+            if (variance < 4) {
+                score += 0.8;  // Reduced from 1.5 to 0.8
             }
         }
 
-        // Heuristic 6: Lexical Diversity
+        // Heuristic 6: Lexical Diversity.
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 1.4;
+            score += 0.8;  // Reduced from 1.4 to 0.8
         }
 
-        // Heuristic 7: Bigram Uniqueness
+        // Heuristic 7: Bigram Uniqueness.
         function getBigrams(arr) {
             let bigrams = [];
             for (let i = 0; i < arr.length - 1; i++) {
@@ -130,22 +130,90 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 1.3;
+                score += 0.8;  // Reduced from 1.3 to 0.8
             }
         }
 
-        // Additional Heuristic: Syntactic Complexity via punctuation variability.
-        function computeSyntaxScore(text) {
-            let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-            if (sentences.length === 0) return 0;
-            let punctuationMatches = text.match(/[,\;:\-]/g);
-            let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
-            let avgPunctuation = punctuationCount / sentences.length;
-            return avgPunctuation < 1 ? 1.1 : 0;
-        }
-        score += computeSyntaxScore(text);
+        // Enhancement 1: Semantic Coherence Score.
+        score += computeSemanticCoherenceScore(text); // previously 1.0 weight
+
+        // Enhancement 2: Proper Noun Consistency Score.
+        score += computeProperNounConsistencyScore(text); // previously 0.8 weight
+
+        // Enhancement 3: Context Shift Score.
+        score += computeContextShiftScore(text); // previously 1.0 weight
+
+        // Enhancement 4: Syntactic Complexity via punctuation variability.
+        score += computeSyntaxScore(text); // previously 1.0 weight
 
         return score;
+    }
+
+    // Enhancement: Semantic Coherence based on Jaccard similarity between adjacent sentences.
+    function computeSemanticCoherenceScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length < 2) return 0;
+        let similarities = [];
+        for (let i = 0; i < sentences.length - 1; i++) {
+            let s1 = new Set(sentences[i].toLowerCase().split(/\s+/));
+            let s2 = new Set(sentences[i+1].toLowerCase().split(/\s+/));
+            let intersection = new Set([...s1].filter(x => s2.has(x)));
+            let union = new Set([...s1, ...s2]);
+            let jaccard = union.size ? intersection.size / union.size : 0;
+            similarities.push(jaccard);
+        }
+        let avgSim = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+        return avgSim < 0.2 ? 0.8 : 0;  // Reduced from 1.0 to 0.8
+    }
+
+    // Enhancement: Proper Noun Consistency Score.
+    function computeProperNounConsistencyScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length < 2) return 0;
+        let counts = sentences.map(sentence => {
+            let words = sentence.split(/\s+/);
+            let properNouns = words.slice(1).filter(word => /^[A-Z][a-z]+/.test(word));
+            return properNouns.length;
+        });
+        let avg = counts.reduce((a, b) => a + b, 0) / counts.length;
+        let variance = counts.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / counts.length;
+        return variance > 2 ? 0.5 : 0;  // Reduced from 0.8 to 0.5
+    }
+
+    // Enhancement: Context Shift Score by comparing word frequency distributions between first and second halves.
+    function computeContextShiftScore(text) {
+        let words = text.split(/\s+/).filter(w => w.length > 0);
+        if (words.length < 10) return 0;
+        let half = Math.floor(words.length / 2);
+        let firstHalf = words.slice(0, half);
+        let secondHalf = words.slice(half);
+        let freq = arr => {
+            let f = {};
+            arr.forEach(word => { f[word] = (f[word] || 0) + 1; });
+            return f;
+        };
+        let f1 = freq(firstHalf), f2 = freq(secondHalf);
+        let allWords = new Set([...Object.keys(f1), ...Object.keys(f2)]);
+        let dot = 0, norm1 = 0, norm2 = 0;
+        allWords.forEach(word => {
+            let v1 = f1[word] || 0;
+            let v2 = f2[word] || 0;
+            dot += v1 * v2;
+            norm1 += v1 * v1;
+            norm2 += v2 * v2;
+        });
+        let cosSim = (norm1 && norm2) ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0;
+        return cosSim < 0.3 ? 0.8 : 0;  // Reduced from 1.0 to 0.8
+    }
+
+    // Enhancement: Syntactic Complexity via punctuation variability.
+    function computeSyntaxScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length === 0) return 0;
+        let punctuationMatches = text.match(/[,\;:\-]/g);
+        let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
+        let avgPunctuation = punctuationCount / sentences.length;
+        return avgPunctuation < 1 ? 1.0 : 0;  // Kept at 1.0
     }
 
     /***********************
@@ -173,7 +241,6 @@
                 score++;
             }
         }
-
         let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
         genericResponses.forEach(phrase => {
             if (textContent === phrase) {
@@ -195,7 +262,6 @@
                 score++;
             }
         }
-
         const links = elem.querySelectorAll('a');
         links.forEach(link => {
             if (scamLinkRegex.test(link.href)) {
@@ -219,7 +285,7 @@
      * HIGHLIGHTING & RECORDING DETECTIONS
      ***********************/
     let botCount = 0;
-    let detectedBots = []; // Records detections with username, snippet, and reason.
+    let detectedBots = []; // Array to store detection details
 
     function createPopup() {
         let popup = document.getElementById("botCounterPopup");
@@ -237,12 +303,10 @@
             popup.style.fontSize = "14px";
             popup.style.cursor = "pointer";
             popup.style.width = "250px";
-
             let header = document.createElement("div");
             header.id = "botPopupHeader";
             header.innerText = "Detected bot/AI content: " + botCount;
             popup.appendChild(header);
-
             let dropdown = document.createElement("div");
             dropdown.id = "botDropdown";
             dropdown.style.display = "none";
@@ -252,12 +316,10 @@
             dropdown.style.borderTop = "1px solid #ccc";
             dropdown.style.paddingTop = "5px";
             popup.appendChild(dropdown);
-
             popup.addEventListener("click", function(e) {
                 e.stopPropagation();
                 dropdown.style.display = (dropdown.style.display === "none") ? "block" : "none";
             });
-
             document.body.appendChild(popup);
         }
     }
@@ -290,9 +352,7 @@
     updatePopup();
 
     function highlightIfSuspected(elem) {
-        if (elem.getAttribute("data-bot-detected") === "true") {
-            return;
-        }
+        if (elem.getAttribute("data-bot-detected") === "true") return;
         const scores = countRedFlags(elem);
         if (scores.totalScore >= RED_FLAG_THRESHOLD) {
             let reason;
@@ -330,10 +390,10 @@
 
     function scanForBots(root = document) {
         const selectors = [
-            'div[data-testid="post-container"]', // new Reddit posts
-            'div[data-testid="comment"]',          // new Reddit comments
-            'div.thing',                           // old Reddit posts/comments
-            'div.Comment'                          // additional new Reddit container
+            'div[data-testid="post-container"]',
+            'div[data-testid="comment"]',
+            'div.thing',
+            'div.Comment'
         ];
         const candidates = root.querySelectorAll(selectors.join(', '));
         candidates.forEach(candidate => {
