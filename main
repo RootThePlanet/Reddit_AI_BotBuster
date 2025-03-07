@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Confidence Coloring
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics and Highlighting (v2.1 FP-Optimized)
 // @namespace    http://tampermonkey.net/
-// @version      2.2
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics, highlights them, and shows a popup. Outline color indicates high vs low confidence.
+// @version      2.1
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics. Highlights flagged elements (red for Bot, blue for AI, purple for Bot/AI) and shows a popup with details. False positives are reduced by adjusting AI scoring weights and increasing the threshold.
 // @author       
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -15,16 +15,15 @@
     /***********************
      * CONFIGURATION
      ***********************/
-    // Lower threshold to catch more content; confidence is determined by how far above threshold the score is.
-    const RED_FLAG_THRESHOLD = 4;  // Base threshold
-    // An element scoring >= (RED_FLAG_THRESHOLD + 2) is considered high confidence.
+    // Increase threshold to reduce false positives.
+    const RED_FLAG_THRESHOLD = 6;  // Previously 4
 
     // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
         /bot/i,                               // Any username containing "bot"
-        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // e.g., "Vacuum-Wonder7569"
+        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // Default Reddit names, e.g., "Vacuum-Wonder7569"
         /^[A-Za-z]+[A-Za-z]+\d+$/,             // Similar to default names missing hyphen
-        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // e.g., "MariaJamesss"
+        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // Two names merged with trailing "s" (e.g., "MariaJamesss")
     ];
 
     function isRandomString(username) {
@@ -72,14 +71,14 @@
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1; // Reduced weight to lower false positives.
+            score += 1; // Reduced weight from 2 to 1
         }
         
         // Heuristic 3: Formal filler phrases.
         const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
         aiPhrases.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1;
+                score += 1; // Keep as is
             }
         });
         
@@ -97,7 +96,7 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1;
+                score += 1; // Reduced weight from 2 to 1
             }
         });
         
@@ -107,8 +106,8 @@
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (variance < 4) { // Uniform sentence length.
-                score += 1;
+            if (variance < 4) { // Low burstiness
+                score += 1; // Reduced weight from 2 to 1
             }
         }
         
@@ -116,7 +115,7 @@
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 1;
+            score += 1; // Reduced weight from 2 to 1
         }
         
         // Heuristic 7: Bigram Uniqueness.
@@ -132,7 +131,7 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 1;
+                score += 1; // Reduced weight from 2 to 1
             }
         }
         
@@ -207,10 +206,10 @@
     }
 
     /***********************
-     * HIGHLIGHTING & RECORDING DETECTIONS WITH CONFIDENCE INDICATION
+     * HIGHLIGHTING & RECORDING DETECTIONS
      ***********************/
     let botCount = 0;
-    let detectedBots = []; // Records detections with username, snippet, and reason/confidence label.
+    let detectedBots = []; // Records detections with username, snippet, and reason.
 
     function createPopup() {
         let popup = document.getElementById("botCounterPopup");
@@ -295,21 +294,14 @@
             } else {
                 reason = "Bot";
             }
-            // Determine overall confidence:
-            // If total score is at least 2 points above the threshold, consider it high confidence.
-            let highConfidence = scores.totalScore >= (RED_FLAG_THRESHOLD + 2);
-            let confidenceLabel = highConfidence ? "High Confidence" : "Low Confidence";
-            
-            // Choose outline color based on reason and confidence.
-            let outlineColor;
+            // Apply highlight style based on detection reason.
             if (reason === "Bot") {
-                outlineColor = highConfidence ? "3px dashed #FF0000" : "3px dashed #FF7F7F";
+                elem.style.outline = "3px dashed red";
             } else if (reason === "AI") {
-                outlineColor = highConfidence ? "3px dashed #0000FF" : "3px dashed #ADD8E6";
-            } else { // Bot/AI
-                outlineColor = highConfidence ? "3px dashed #800080" : "3px dashed #D8BFD8";
+                elem.style.outline = "3px dashed blue";
+            } else {
+                elem.style.outline = "3px dashed purple";
             }
-            elem.style.outline = outlineColor;
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
             if (!elem.getAttribute("data-bot-recorded")) {
@@ -319,11 +311,11 @@
                 if (comment.length > 100) {
                     comment = comment.substring(0, 100) + "...";
                 }
-                detectedBots.push({ username: username, comment: comment, reason: reason + " (" + confidenceLabel + ")" });
+                detectedBots.push({ username: username, comment: comment, reason: reason });
                 elem.setAttribute("data-bot-recorded", "true");
             }
             updatePopup();
-            console.log("Advanced Detector: Highlighted element with", scores.totalScore, "red flags. " + confidenceLabel);
+            console.log("Advanced Detector: Highlighted element with", scores.totalScore, "red flags.");
         }
     }
 
