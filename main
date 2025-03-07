@@ -1,9 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.1)
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics and Highlighting (False Positive Reduced)
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics—including burstiness, lexical diversity, n-gram uniqueness, and a new syntactic complexity check—highlights them instead of hiding, and shows a persistent popup with details.
-// @author       
+// @version      2.1.1
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics, highlights them, and shows a popup. Weights have been adjusted to reduce false positives.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -20,9 +19,9 @@
     // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
         /bot/i,                               // Any username containing "bot"
-        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // e.g., "Vacuum-Wonder7569"
+        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // Default Reddit names, e.g., "Vacuum-Wonder7569"
         /^[A-Za-z]+[A-Za-z]+\d+$/,             // Similar to default names missing hyphen
-        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // e.g., "MariaJamesss"
+        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // Two names merged with trailing "s" (e.g., "MariaJamesss")
     ];
 
     function isRandomString(username) {
@@ -54,28 +53,13 @@
     const commentTextMap = new Map();
 
     /***********************
-     * ADDITIONAL SYNTAX HEURISTIC
-     ***********************/
-    // This heuristic approximates syntactic complexity by checking punctuation variability.
-    // It counts commas, semicolons, colons, and dashes, and computes an average per sentence.
-    // Low average punctuation per sentence (i.e. <1 per sentence) is flagged.
-    function computeSyntaxScore(text) {
-        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-        if (sentences.length === 0) return 0;
-        let punctuationMatches = text.match(/[,\;:\-]/g);
-        let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
-        let avgPunctuation = punctuationCount / sentences.length;
-        return avgPunctuation < 1 ? 1 : 0;
-    }
-
-    /***********************
-     * ADVANCED AI DETECTION HEURISTICS
+     * ADVANCED AI DETECTION HEURISTICS (Weights Adjusted)
      ***********************/
     function computeAIScore(text) {
         let score = 0;
         let lowerText = text.toLowerCase();
         
-        // Heuristic 1: Common AI disclaimers.
+        // Heuristic 1: Common AI disclaimers remain strong.
         if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
             score += 3;
         }
@@ -85,7 +69,7 @@
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 2;
+            score += 1; // Reduced weight (was 2)
         }
         
         // Heuristic 3: Formal filler phrases.
@@ -110,7 +94,7 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 2;
+                score += 1; // Reduced weight (was 2)
             }
         });
         
@@ -120,8 +104,8 @@
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (variance < 4) {
-                score += 2;
+            if (variance < 4) { // Uniform sentence length.
+                score += 1; // Reduced weight (was 2)
             }
         }
         
@@ -129,7 +113,7 @@
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 2;
+            score += 1; // Reduced weight (was 2)
         }
         
         // Heuristic 7: Bigram Uniqueness.
@@ -145,12 +129,9 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 2;
+                score += 1; // Reduced weight (was 2)
             }
         }
-        
-        // Additional Heuristic: Syntactic Complexity via punctuation variability.
-        score += computeSyntaxScore(text);
         
         return score;
     }
