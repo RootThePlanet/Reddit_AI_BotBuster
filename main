@@ -1,8 +1,9 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Confidence Coloring (v2.4)
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.1)
 // @namespace    http://tampermonkey.net/
-// @version      2.4
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics, highlights them, and shows a popup. Outline color indicates high vs low confidence.
+// @version      2.1
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics—including burstiness, lexical diversity, n-gram uniqueness, and a new syntactic complexity check—highlights them instead of hiding, and shows a persistent popup with details.
+// @author       
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -14,9 +15,7 @@
     /***********************
      * CONFIGURATION
      ***********************/
-    // Lowered threshold to 3 to catch more potential issues.
-    const RED_FLAG_THRESHOLD = 3;  // Base threshold; elements with a score >= 3 will be flagged.
-    // An element scoring >= (RED_FLAG_THRESHOLD + 2) is considered high confidence.
+    const RED_FLAG_THRESHOLD = 4;  // Total score threshold for highlighting
 
     // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
@@ -55,6 +54,21 @@
     const commentTextMap = new Map();
 
     /***********************
+     * ADDITIONAL SYNTAX HEURISTIC
+     ***********************/
+    // This heuristic approximates syntactic complexity by checking punctuation variability.
+    // It counts commas, semicolons, colons, and dashes, and computes an average per sentence.
+    // Low average punctuation per sentence (i.e. <1 per sentence) is flagged.
+    function computeSyntaxScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length === 0) return 0;
+        let punctuationMatches = text.match(/[,\;:\-]/g);
+        let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
+        let avgPunctuation = punctuationCount / sentences.length;
+        return avgPunctuation < 1 ? 1 : 0;
+    }
+
+    /***********************
      * ADVANCED AI DETECTION HEURISTICS
      ***********************/
     function computeAIScore(text) {
@@ -71,7 +85,7 @@
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1; // Reduced weight
+            score += 2;
         }
         
         // Heuristic 3: Formal filler phrases.
@@ -96,7 +110,7 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1;
+                score += 2;
             }
         });
         
@@ -106,8 +120,8 @@
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (variance < 4) { // Uniform sentence length.
-                score += 1;
+            if (variance < 4) {
+                score += 2;
             }
         }
         
@@ -115,7 +129,7 @@
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 1;
+            score += 2;
         }
         
         // Heuristic 7: Bigram Uniqueness.
@@ -131,9 +145,12 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 1;
+                score += 2;
             }
         }
+        
+        // Additional Heuristic: Syntactic Complexity via punctuation variability.
+        score += computeSyntaxScore(text);
         
         return score;
     }
@@ -206,7 +223,7 @@
     }
 
     /***********************
-     * HIGHLIGHTING & RECORDING DETECTIONS WITH CONFIDENCE INDICATION
+     * HIGHLIGHTING & RECORDING DETECTIONS
      ***********************/
     let botCount = 0;
     let detectedBots = []; // Records detections with username, snippet, and reason.
@@ -293,20 +310,14 @@
             } else {
                 reason = "Bot";
             }
-            // Determine confidence: if score >= threshold + 2, high confidence; else low.
-            let highConfidence = scores.totalScore >= (RED_FLAG_THRESHOLD + 2);
-            let confidenceLabel = highConfidence ? "High Confidence" : "Low Confidence";
-            
-            // Choose outline color based on reason and confidence.
-            let outlineColor;
+            // Apply outline based on detection reason.
             if (reason === "Bot") {
-                outlineColor = highConfidence ? "3px dashed #FF0000" : "3px dashed #FF7F7F";
+                elem.style.outline = "3px dashed red";
             } else if (reason === "AI") {
-                outlineColor = highConfidence ? "3px dashed #0000FF" : "3px dashed #ADD8E6";
-            } else { // Bot/AI
-                outlineColor = highConfidence ? "3px dashed #800080" : "3px dashed #D8BFD8";
+                elem.style.outline = "3px dashed blue";
+            } else {
+                elem.style.outline = "3px dashed purple";
             }
-            elem.style.outline = outlineColor;
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
             if (!elem.getAttribute("data-bot-recorded")) {
@@ -316,25 +327,24 @@
                 if (comment.length > 100) {
                     comment = comment.substring(0, 100) + "...";
                 }
-                detectedBots.push({ username: username, comment: comment, reason: reason + " (" + confidenceLabel + ")" });
+                detectedBots.push({ username: username, comment: comment, reason: reason });
                 elem.setAttribute("data-bot-recorded", "true");
             }
             updatePopup();
-            console.log("Advanced Detector: Highlighted element with", scores.totalScore, "red flags. " + confidenceLabel);
+            console.log("Advanced Detector: Highlighted element with", scores.totalScore, "red flags.");
         }
     }
 
     function scanForBots(root = document) {
         const selectors = [
-            'div[data-testid="post-container"]', 
-            'div[data-testid="comment"]',          
-            'div.thing',                           
-            'div.Comment'                          
+            'div[data-testid="post-container"]', // new Reddit posts
+            'div[data-testid="comment"]',          // new Reddit comments
+            'div.thing',                           // old Reddit posts/comments
+            'div.Comment'                          // additional new Reddit container
         ];
         const candidates = root.querySelectorAll(selectors.join(', '));
         candidates.forEach(candidate => {
-            let textContent = candidate.innerText || "";
-            textContent = textContent.toLowerCase().replace(/\s+/g, ' ').trim();
+            let textContent = candidate.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
             if (textContent.length > 0) {
                 const currentCount = commentTextMap.get(textContent) || 0;
                 commentTextMap.set(textContent, currentCount + 1);
