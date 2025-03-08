@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.4.2 Conservative Age)
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.5)
 // @namespace    http://tampermonkey.net/
-// @version      2.4.2
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements and displays a popup with details. Uses a more conservative account age penalty.
+// @version      2.5
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights, including a new trigram uniqueness check. Highlights flagged elements and displays a popup with details.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -14,12 +14,11 @@
     /***********************
      * CONFIGURATION
      ***********************/
-    // Threshold set to 5 to reduce false positives.
-    const RED_FLAG_THRESHOLD = 5;
+    const RED_FLAG_THRESHOLD = 5;  // Overall threshold
 
     // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
-        /bot/i,                               // Any username containing "bot"
+        /bot/i,                               // Contains "bot"
         /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // e.g., "Vacuum-Wonder7569"
         /^[A-Za-z]+[A-Za-z]+\d+$/,             // Names without hyphen
         /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // e.g., "MariaJamesss"
@@ -45,14 +44,12 @@
 
     const scamLinkRegex = /\.(live|life|shop)\b/i;
 
-    // Check if account tooltip indicates a new account.
     function isNewAccount(userElem) {
         const titleAttr = userElem.getAttribute('title') || "";
         return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
     }
 
-    // NEW: Parse account age from the title attribute.
-    // Returns age in months (approx), or null if not found.
+    // Parse account age from the user's tooltip (returns age in months)
     function getAccountAge(userElem) {
         const titleAttr = userElem.getAttribute('title') || "";
         const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
@@ -60,7 +57,7 @@
             let value = parseInt(match[1]);
             let unit = match[2].toLowerCase();
             if (unit === "day") {
-                return value / 30; // approximate months
+                return value / 30;
             } else if (unit === "week") {
                 return (value * 7) / 30;
             } else if (unit === "month") {
@@ -84,7 +81,7 @@
 
         // Heuristic 1: Explicit AI disclaimers.
         if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
-            score += 1.9;
+            score += 2.0;
         }
 
         // Heuristic 2: Lack of contractions in long texts.
@@ -92,14 +89,14 @@
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1.0;
+            score += 1.3;
         }
 
         // Heuristic 3: Formal filler phrases.
         const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
         aiPhrases.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 0.4;
+                score += 0.5;
             }
         });
 
@@ -117,7 +114,7 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 0.9;
+                score += 1.0;
             }
         });
 
@@ -128,7 +125,7 @@
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
             if (variance < 4) {
-                score += 0.7;
+                score += 1.0;
             }
         }
 
@@ -136,7 +133,7 @@
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 0.7;
+            score += 1.0;
         }
 
         // Heuristic 7: Bigram Uniqueness.
@@ -152,7 +149,24 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 0.9;
+                score += 1.0;
+            }
+        }
+
+        // New Enhancement: Trigram Uniqueness.
+        function getTrigrams(arr) {
+            let trigrams = [];
+            for (let i = 0; i < arr.length - 2; i++) {
+                trigrams.push(arr[i] + " " + arr[i+1] + " " + arr[i+2]);
+            }
+            return trigrams;
+        }
+        let trigrams = getTrigrams(words);
+        if (trigrams.length > 0) {
+            let uniqueTrigrams = new Set(trigrams);
+            let trigramRatio = uniqueTrigrams.size / trigrams.length;
+            if (trigramRatio < 0.6) { // If less than 60% of trigrams are unique
+                score += 0.8;
             }
         }
 
@@ -262,9 +276,9 @@
             if (isNewAccount(userElem)) {
                 score++;
             }
-            // More conservative account age penalty:
+            // Conservative account age penalty: Only penalize if account is less than 2 months old.
             let ageInMonths = getAccountAge(userElem);
-            if (ageInMonths !== null && ageInMonths < 2) { // Only penalize if account is less than 2 months old.
+            if (ageInMonths !== null && ageInMonths < 2) {
                 score += 0.5;
             }
         }
