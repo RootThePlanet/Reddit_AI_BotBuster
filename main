@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Reddit AI BotBuster
 // @namespace    http://tampermonkey.net/
-// @version      2.8
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics. Highlights flagged elements, shows a styled popup, and lists clickable bot/AI accounts in the dropdown.
+// @version      2.8.1
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements, displays a styled popup, and styles bot usernames in orange with a larger font.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -20,7 +20,6 @@
             color: orange !important;
             font-size: 14px !important;
         }
-        /* Smooth scrolling for anchor jumps */
         html {
             scroll-behavior: smooth;
         }
@@ -30,9 +29,9 @@
     /***********************
      * CONFIGURATION
      ***********************/
-    const RED_FLAG_THRESHOLD = 5;  // Combined score threshold
+    const RED_FLAG_THRESHOLD = 5;  // Overall threshold
 
-    // Bot-related heuristics
+    // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
         /bot/i,
         /^[A-Za-z]+-[A-Za-z]+\d{4}$/,
@@ -65,7 +64,7 @@
         return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
     }
 
-    // Parse account age in months from user tooltip
+    // Parse account age (in months) from the user's tooltip.
     function getAccountAge(userElem) {
         const titleAttr = userElem.getAttribute('title') || "";
         const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
@@ -80,31 +79,59 @@
         return null;
     }
 
-    // Track duplicates
+    // Global map to track duplicate comment texts.
     const commentTextMap = new Map();
 
     /***********************
-     * AI DETECTION HEURISTICS
-     * (Slightly lowered weights to reduce false positives)
+     * READABILITY HEURISTIC
+     ***********************/
+    // Approximate syllable counter: counts vowel groups as syllables.
+    function countSyllables(word) {
+        word = word.toLowerCase();
+        if(word.length <= 3) { return 1; }
+        word = word.replace(/e\b/g, "");  // remove silent e's
+        let matches = word.match(/[aeiouy]{1,}/g);
+        return matches ? matches.length : 1;
+    }
+
+    // Compute an approximate Flesch Reading Ease score.
+    function computeReadabilityScore(text) {
+        let sentenceMatches = text.match(/[^.!?]+[.!?]+/g);
+        if (!sentenceMatches) return null;
+        let sentences = sentenceMatches;
+        let words = text.split(/\s+/).filter(w => w.length > 0);
+        let sentenceCount = sentences.length;
+        let wordCount = words.length;
+        let syllableCount = 0;
+        words.forEach(word => {
+            syllableCount += countSyllables(word);
+        });
+        // Flesch Reading Ease formula: higher is easier
+        let flesch = 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount);
+        return flesch;
+    }
+
+    /***********************
+     * ADVANCED AI DETECTION HEURISTICS (Fractional Weights)
      ***********************/
     function computeAIScore(text) {
         let score = 0;
         let lowerText = text.toLowerCase();
 
-        // 1. AI disclaimers (slightly reduced)
+        // 1. Explicit AI disclaimers.
         if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
-            score += 1.9; // from 2.0
+            score += 1.9;
         }
 
-        // 2. Lack of contractions in long texts (slightly reduced)
+        // 2. Lack of contractions in long texts.
         let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1.2; // from 1.3
+            score += 1.2;
         }
 
-        // 3. Formal filler phrases
+        // 3. Formal filler phrases.
         const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
         aiPhrases.forEach(phrase => {
             if (lowerText.includes(phrase)) {
@@ -112,7 +139,7 @@
             }
         });
 
-        // 4. Common AI indicator phrases (slightly reduced)
+        // 4. Common AI indicator phrases.
         const aiIndicators = [
             "i do not have personal experiences",
             "my training data",
@@ -126,29 +153,29 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 0.9; // from 1.0
+                score += 0.9;
             }
         });
 
-        // 5. Repetitiveness / low burstiness (slightly reduced)
+        // 5. Repetitiveness / low burstiness.
         let sentences = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length > 1) {
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
             if (variance < 4) {
-                score += 0.9; // from 1.0
+                score += 0.9;
             }
         }
 
-        // 6. Lexical diversity (slightly reduced)
+        // 6. Lexical diversity.
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 0.9; // from 1.0
+            score += 0.9;
         }
 
-        // 7. Bigram uniqueness (slightly reduced)
+        // 7. Bigram uniqueness.
         function getBigrams(arr) {
             let bigrams = [];
             for (let i = 0; i < arr.length - 1; i++) {
@@ -161,11 +188,11 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 0.9; // from 1.0
+                score += 0.9;
             }
         }
 
-        // 8. Trigram uniqueness (slightly reduced)
+        // 8. Trigram uniqueness.
         function getTrigrams(arr) {
             let trigrams = [];
             for (let i = 0; i < arr.length - 2; i++) {
@@ -178,15 +205,28 @@
             let uniqueTrigrams = new Set(trigrams);
             let trigramRatio = uniqueTrigrams.size / trigrams.length;
             if (trigramRatio < 0.6) {
-                score += 0.7; // from 0.8
+                score += 0.7;
             }
         }
 
-        // Enhancements
+        // Enhancement: Semantic Coherence Score.
         score += computeSemanticCoherenceScore(text); // 0.7
+
+        // Enhancement: Proper Noun Consistency Score.
         score += computeProperNounConsistencyScore(text); // 0.4
+
+        // Enhancement: Context Shift Score.
         score += computeContextShiftScore(text); // 0.7
+
+        // Enhancement: Syntactic Complexity.
         score += computeSyntaxScore(text); // 1.0
+
+        // New Enhancement: Readability Check.
+        let readability = computeReadabilityScore(text);
+        // If the text is overly simplistic (reading ease above 80), add a small penalty.
+        if (readability !== null && readability > 80) {
+            score += 0.5;
+        }
 
         return score;
     }
@@ -255,64 +295,40 @@
     }
 
     /***********************
-     * BOT SCORE
+     * BOT SCORE (Non-AI) CALCULATION
      ***********************/
     function computeBotScore(elem) {
         let score = 0;
-        // Attempt multiple possible selectors for user links
+        // Use multiple selectors for user links.
         const userElem = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
         if (userElem) {
             const username = userElem.innerText.trim();
             if (username) {
-                if (username.toLowerCase().includes("bot")) {
-                    score++;
-                }
+                if (username.toLowerCase().includes("bot")) { score++; }
                 suspiciousUserPatterns.forEach(pattern => {
-                    if (pattern.test(username)) {
-                        score++;
-                    }
+                    if (pattern.test(username)) { score++; }
                 });
-                if (isRandomString(username)) {
-                    score++;
-                }
+                if (isRandomString(username)) { score++; }
             }
-            if (isNewAccount(userElem)) {
-                score++;
-            }
+            if (isNewAccount(userElem)) { score++; }
             let ageInMonths = getAccountAge(userElem);
-            if (ageInMonths !== null && ageInMonths < 2) {
-                score += 0.5;
-            }
+            if (ageInMonths !== null && ageInMonths < 2) { score += 0.5; }
         }
         let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
         genericResponses.forEach(phrase => {
-            if (textContent === phrase) {
-                score++;
-            }
+            if (textContent === phrase) { score++; }
         });
-        if (textContent.split(' ').length < 3) {
-            score++;
-        }
-        if (textContent.includes("&amp;") && !textContent.includes("& ")) {
-            score++;
-        }
-        if (textContent.startsWith('>') && textContent.split(' ').length < 5) {
-            score++;
-        }
+        if (textContent.split(' ').length < 3) { score++; }
+        if (textContent.includes("&amp;") && !textContent.includes("& ")) { score++; }
+        if (textContent.startsWith('>') && textContent.split(' ').length < 5) { score++; }
         if (textContent.length > 0) {
             const count = commentTextMap.get(textContent) || 0;
-            if (count > 0) {
-                score++;
-            }
+            if (count > 0) { score++; }
         }
         const links = elem.querySelectorAll('a');
         links.forEach(link => {
-            if (scamLinkRegex.test(link.href)) {
-                score++;
-            }
-            if (link.parentElement && link.parentElement.innerText.includes("Powered by Gearlaunch")) {
-                score++;
-            }
+            if (scamLinkRegex.test(link.href)) { score++; }
+            if (link.parentElement && link.parentElement.innerText.includes("Powered by Gearlaunch")) { score++; }
         });
         return score;
     }
@@ -328,7 +344,7 @@
      ***********************/
     let botCount = 0;
     let detectedBots = [];
-    let detectionIndex = 0; // For anchor ID assignment
+    let detectionIndex = 0; // For anchoring
 
     function createPopup() {
         let popup = document.getElementById("botCounterPopup");
@@ -351,13 +367,9 @@
             let header = document.createElement("div");
             header.id = "botPopupHeader";
             header.innerText = "Detected bot/AI content: " + botCount;
-            if (botCount < 10) {
-                header.style.color = "green";
-            } else if (botCount < 30) {
-                header.style.color = "yellow";
-            } else {
-                header.style.color = "red";
-            }
+            if (botCount < 10) { header.style.color = "green"; }
+            else if (botCount < 30) { header.style.color = "yellow"; }
+            else { header.style.color = "red"; }
             popup.appendChild(header);
             let dropdown = document.createElement("div");
             dropdown.id = "botDropdown";
@@ -368,12 +380,10 @@
             dropdown.style.borderTop = "1px solid #ccc";
             dropdown.style.paddingTop = "5px";
             popup.appendChild(dropdown);
-
             popup.addEventListener("click", function(e) {
                 e.stopPropagation();
                 dropdown.style.display = (dropdown.style.display === "none") ? "block" : "none";
             });
-
             document.body.appendChild(popup);
         }
     }
@@ -383,13 +393,9 @@
         let dropdown = document.getElementById("botDropdown");
         if (header) {
             header.innerText = "Detected bot/AI content: " + botCount;
-            if (botCount < 10) {
-                header.style.color = "green";
-            } else if (botCount < 30) {
-                header.style.color = "yellow";
-            } else {
-                header.style.color = "red";
-            }
+            if (botCount < 10) { header.style.color = "green"; }
+            else if (botCount < 30) { header.style.color = "yellow"; }
+            else { header.style.color = "red"; }
         }
         if (dropdown) {
             dropdown.innerHTML = "";
@@ -401,15 +407,13 @@
                 detectedBots.forEach(function(item) {
                     let entry = document.createElement("div");
                     entry.style.marginBottom = "5px";
-
-                    // Link to jump to the flagged comment
+                    // Create an anchor that links to the detected comment.
                     let link = document.createElement("a");
-                    link.href = "#" + item.elemID; // anchor link
+                    link.href = "#" + item.elemID;
                     link.style.color = "inherit";
                     link.style.textDecoration = "none";
                     link.style.cursor = "pointer";
                     link.innerText = item.username;
-
                     entry.appendChild(link);
                     dropdown.appendChild(entry);
                 });
@@ -425,31 +429,22 @@
         const scores = countRedFlags(elem);
         if (scores.totalScore >= RED_FLAG_THRESHOLD) {
             let reason = "";
-            if (scores.botScore > 0 && scores.aiScore > 0) {
-                reason = "Bot/AI";
-            } else if (scores.aiScore > 0) {
-                reason = "AI";
-            } else {
-                reason = "Bot";
-            }
+            if (scores.botScore > 0 && scores.aiScore > 0) { reason = "Bot/AI"; }
+            else if (scores.aiScore > 0) { reason = "AI"; }
+            else { reason = "Bot"; }
 
-            // Outline
-            if (reason === "Bot") {
-                elem.style.outline = "3px dashed red";
-            } else if (reason === "AI") {
-                elem.style.outline = "3px dashed blue";
-            } else {
-                elem.style.outline = "3px dashed purple";
-            }
+            if (reason === "Bot") { elem.style.outline = "3px dashed red"; }
+            else if (reason === "AI") { elem.style.outline = "3px dashed blue"; }
+            else { elem.style.outline = "3px dashed purple"; }
+
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
 
-            // Assign an ID so we can anchor to it
             detectionIndex++;
             const elemID = "botbuster-detected-" + detectionIndex;
             elem.setAttribute("id", elemID);
 
-            // If reason includes "bot", style the username
+            // If reason indicates a bot, style the username.
             if (reason.toLowerCase().includes("bot")) {
                 const userLinks = elem.querySelectorAll(
                   'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]'
@@ -459,13 +454,11 @@
                 });
             }
 
-            // Record
             if (!elem.getAttribute("data-bot-recorded")) {
                 let userElemForRecord = elem.querySelector(
                   'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]'
                 );
                 let username = userElemForRecord ? userElemForRecord.innerText.trim() : "Unknown";
-                // We only store the username and an anchor ID
                 detectedBots.push({
                     username: username,
                     elemID: elemID
@@ -496,7 +489,7 @@
     }
 
     /***********************
-     * OBSERVATION
+     * INITIALIZATION & DYNAMIC OBSERVATION
      ***********************/
     scanForBots();
 
