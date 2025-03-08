@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.6 Styled Popup)
+// @name         Reddit AI BotBuster (v2.6 Styled Popup)
 // @namespace    http://tampermonkey.net/
 // @version      2.6
 // @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements and displays a styled popup with details.
