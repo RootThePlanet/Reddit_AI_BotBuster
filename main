@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.5)
+// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.6 Styled Popup)
 // @namespace    http://tampermonkey.net/
-// @version      2.5
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights, including a new trigram uniqueness check. Highlights flagged elements and displays a popup with details.
+// @version      2.6
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics with fractional weights. Highlights flagged elements and displays a styled popup with details.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -14,14 +14,14 @@
     /***********************
      * CONFIGURATION
      ***********************/
-    const RED_FLAG_THRESHOLD = 5;  // Overall threshold
+    const RED_FLAG_THRESHOLD = 5;
 
     // --- Bot-related heuristics ---
     const suspiciousUserPatterns = [
-        /bot/i,                               // Contains "bot"
-        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,          // e.g., "Vacuum-Wonder7569"
-        /^[A-Za-z]+[A-Za-z]+\d+$/,             // Names without hyphen
-        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/         // e.g., "MariaJamesss"
+        /bot/i,
+        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,
+        /^[A-Za-z]+[A-Za-z]+\d+$/,
+        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/
     ];
 
     function isRandomString(username) {
@@ -49,22 +49,17 @@
         return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
     }
 
-    // Parse account age from the user's tooltip (returns age in months)
+    // Parse account age (in months) from the user's tooltip.
     function getAccountAge(userElem) {
         const titleAttr = userElem.getAttribute('title') || "";
         const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
         if (match) {
             let value = parseInt(match[1]);
             let unit = match[2].toLowerCase();
-            if (unit === "day") {
-                return value / 30;
-            } else if (unit === "week") {
-                return (value * 7) / 30;
-            } else if (unit === "month") {
-                return value;
-            } else if (unit === "year") {
-                return value * 12;
-            }
+            if (unit === "day") return value / 30;
+            if (unit === "week") return (value * 7) / 30;
+            if (unit === "month") return value;
+            if (unit === "year") return value * 12;
         }
         return null;
     }
@@ -79,12 +74,10 @@
         let score = 0;
         let lowerText = text.toLowerCase();
 
-        // Heuristic 1: Explicit AI disclaimers.
         if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
             score += 2.0;
         }
 
-        // Heuristic 2: Lack of contractions in long texts.
         let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
@@ -92,7 +85,6 @@
             score += 1.3;
         }
 
-        // Heuristic 3: Formal filler phrases.
         const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
         aiPhrases.forEach(phrase => {
             if (lowerText.includes(phrase)) {
@@ -100,7 +92,6 @@
             }
         });
 
-        // Heuristic 4: Common AI indicator phrases.
         const aiIndicators = [
             "i do not have personal experiences",
             "my training data",
@@ -118,7 +109,6 @@
             }
         });
 
-        // Heuristic 5: Repetitiveness / low burstiness.
         let sentences = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length > 1) {
             let lengths = sentences.map(s => s.split(/\s+/).length);
@@ -129,14 +119,12 @@
             }
         }
 
-        // Heuristic 6: Lexical Diversity.
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
             score += 1.0;
         }
 
-        // Heuristic 7: Bigram Uniqueness.
         function getBigrams(arr) {
             let bigrams = [];
             for (let i = 0; i < arr.length - 1; i++) {
@@ -165,27 +153,19 @@
         if (trigrams.length > 0) {
             let uniqueTrigrams = new Set(trigrams);
             let trigramRatio = uniqueTrigrams.size / trigrams.length;
-            if (trigramRatio < 0.6) { // If less than 60% of trigrams are unique
+            if (trigramRatio < 0.6) {
                 score += 0.8;
             }
         }
 
-        // Enhancement 1: Semantic Coherence Score.
         score += computeSemanticCoherenceScore(text); // 0.7
-
-        // Enhancement 2: Proper Noun Consistency Score.
         score += computeProperNounConsistencyScore(text); // 0.4
-
-        // Enhancement 3: Context Shift Score.
         score += computeContextShiftScore(text); // 0.7
-
-        // Enhancement 4: Syntactic Complexity via punctuation variability.
         score += computeSyntaxScore(text); // 1.0
 
         return score;
     }
 
-    // Enhancement: Semantic Coherence based on Jaccard similarity between adjacent sentences.
     function computeSemanticCoherenceScore(text) {
         let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length < 2) return 0;
@@ -202,7 +182,6 @@
         return avgSim < 0.2 ? 0.7 : 0;
     }
 
-    // Enhancement: Proper Noun Consistency Score.
     function computeProperNounConsistencyScore(text) {
         let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length < 2) return 0;
@@ -216,7 +195,6 @@
         return variance > 2 ? 0.4 : 0;
     }
 
-    // Enhancement: Context Shift Score by comparing word frequency distributions between first and second halves.
     function computeContextShiftScore(text) {
         let words = text.split(/\s+/).filter(w => w.length > 0);
         if (words.length < 10) return 0;
@@ -242,7 +220,6 @@
         return cosSim < 0.3 ? 0.7 : 0;
     }
 
-    // Enhancement: Syntactic Complexity via punctuation variability.
     function computeSyntaxScore(text) {
         let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length === 0) return 0;
@@ -276,7 +253,6 @@
             if (isNewAccount(userElem)) {
                 score++;
             }
-            // Conservative account age penalty: Only penalize if account is less than 2 months old.
             let ageInMonths = getAccountAge(userElem);
             if (ageInMonths !== null && ageInMonths < 2) {
                 score += 0.5;
@@ -315,7 +291,6 @@
         return score;
     }
 
-    // Combined scoring: total score = botScore + aiScore.
     function countRedFlags(elem) {
         const botScore = computeBotScore(elem);
         const aiScore = computeAIScore(elem.innerText);
@@ -326,7 +301,7 @@
      * HIGHLIGHTING & RECORDING DETECTIONS
      ***********************/
     let botCount = 0;
-    let detectedBots = []; // Array to store detection details
+    let detectedBots = [];
 
     function createPopup() {
         let popup = document.getElementById("botCounterPopup");
@@ -334,19 +309,28 @@
             popup = document.createElement("div");
             popup.id = "botCounterPopup";
             popup.style.position = "fixed";
-            popup.style.top = "10px";
+            popup.style.top = "40px"; // Moved to 40px from top
             popup.style.right = "10px";
-            popup.style.backgroundColor = "#f8f8f8";
+            popup.style.backgroundColor = "rgba(248,248,248,0.5)"; // More transparent
             popup.style.border = "1px solid #ccc";
             popup.style.padding = "10px";
             popup.style.zIndex = "9999";
-            popup.style.fontFamily = "Arial, sans-serif";
-            popup.style.fontSize = "14px";
-            popup.style.cursor = "pointer";
+            popup.style.fontFamily = "Roboto, sans-serif"; // Changed to Roboto
+            popup.style.fontSize = "12px"; // Slightly smaller font size
+            // Add a blur effect to the background
+            popup.style.backdropFilter = "blur(5px)";
+            popup.style.webkitBackdropFilter = "blur(5px)";
             popup.style.width = "250px";
             let header = document.createElement("div");
             header.id = "botPopupHeader";
             header.innerText = "Detected bot/AI content: " + botCount;
+            if (botCount < 10) {
+                header.style.color = "green";
+            } else if (botCount < 30) {
+                header.style.color = "yellow";
+            } else {
+                header.style.color = "red";
+            }
             popup.appendChild(header);
             let dropdown = document.createElement("div");
             dropdown.id = "botDropdown";
@@ -370,6 +354,13 @@
         let dropdown = document.getElementById("botDropdown");
         if (header) {
             header.innerText = "Detected bot/AI content: " + botCount;
+            if (botCount < 10) {
+                header.style.color = "green";
+            } else if (botCount < 30) {
+                header.style.color = "yellow";
+            } else {
+                header.style.color = "red";
+            }
         }
         if (dropdown) {
             dropdown.innerHTML = "";
@@ -404,7 +395,6 @@
             } else {
                 reason = "Bot";
             }
-            // Apply outline based on detection reason.
             if (reason === "Bot") {
                 elem.style.outline = "3px dashed red";
             } else if (reason === "AI") {
