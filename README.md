@@ -36,3 +36,7 @@ A unique feature of this version is that it factors in the user's account age—
   You can tweak the weights or threshold directly in the script if needed.
 
 Enjoy a more authentic Reddit experience with enhanced detection of automated and AI-generated content!
+
+
+[![new.png](https://i.postimg.cc/3rqfM41M/new.png)](https://postimg.cc/CdjskK9J)
+[![2025-03-08-0-07-43.png](https://i.postimg.cc/HxRNtVPC/2025-03-08-0-07-43.png)](https://postimg.cc/62VzW5XH)
