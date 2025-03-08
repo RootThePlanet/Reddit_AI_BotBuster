@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Advanced Reddit Bot & AI Detector with Advanced Heuristics (v2.7 Bot Name CSS MultiSelector)
+// @name         Reddit AI BotBuster
 // @namespace    http://tampermonkey.net/
-// @version      2.7
-// @description  Detects suspected bot and AI-generated posts/comments on Reddit. Highlights flagged items, displays a styled popup, and styles bot usernames in orange with a larger font using multiple selectors.
+// @version      2.8
+// @description  Detects suspected bot and AI-generated posts/comments on Reddit using advanced heuristics. Highlights flagged elements, shows a styled popup, and lists clickable bot/AI accounts in the dropdown.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
 // @grant        none
@@ -20,13 +20,17 @@
             color: orange !important;
             font-size: 14px !important;
         }
+        /* Smooth scrolling for anchor jumps */
+        html {
+            scroll-behavior: smooth;
+        }
     `;
     document.head.appendChild(style);
 
     /***********************
      * CONFIGURATION
      ***********************/
-    const RED_FLAG_THRESHOLD = 5;
+    const RED_FLAG_THRESHOLD = 5;  // Combined score threshold
 
     // Bot-related heuristics
     const suspiciousUserPatterns = [
@@ -61,7 +65,7 @@
         return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
     }
 
-    // Parse account age (in months) from the user's tooltip.
+    // Parse account age in months from user tooltip
     function getAccountAge(userElem) {
         const titleAttr = userElem.getAttribute('title') || "";
         const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
@@ -76,27 +80,28 @@
         return null;
     }
 
-    // Global map to track duplicate comment texts.
+    // Track duplicates
     const commentTextMap = new Map();
 
     /***********************
-     * AI DETECTION HEURISTICS (Fractional Weights)
+     * AI DETECTION HEURISTICS
+     * (Slightly lowered weights to reduce false positives)
      ***********************/
     function computeAIScore(text) {
         let score = 0;
         let lowerText = text.toLowerCase();
 
-        // 1. AI disclaimers
+        // 1. AI disclaimers (slightly reduced)
         if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
-            score += 2.0;
+            score += 1.9; // from 2.0
         }
 
-        // 2. Lack of contractions in long texts
+        // 2. Lack of contractions in long texts (slightly reduced)
         let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
         let words = lowerText.split(/\s+/);
         let wordCount = words.length;
         if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1.3;
+            score += 1.2; // from 1.3
         }
 
         // 3. Formal filler phrases
@@ -107,7 +112,7 @@
             }
         });
 
-        // 4. Common AI indicator phrases
+        // 4. Common AI indicator phrases (slightly reduced)
         const aiIndicators = [
             "i do not have personal experiences",
             "my training data",
@@ -121,29 +126,29 @@
         ];
         aiIndicators.forEach(phrase => {
             if (lowerText.includes(phrase)) {
-                score += 1.0;
+                score += 0.9; // from 1.0
             }
         });
 
-        // 5. Repetitiveness / low burstiness
+        // 5. Repetitiveness / low burstiness (slightly reduced)
         let sentences = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentences.length > 1) {
             let lengths = sentences.map(s => s.split(/\s+/).length);
             let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
             if (variance < 4) {
-                score += 1.0;
+                score += 0.9; // from 1.0
             }
         }
 
-        // 6. Lexical diversity
+        // 6. Lexical diversity (slightly reduced)
         let uniqueWords = new Set(words);
         let typeTokenRatio = uniqueWords.size / words.length;
         if (words.length > 20 && typeTokenRatio < 0.3) {
-            score += 1.0;
+            score += 0.9; // from 1.0
         }
 
-        // 7. Bigram uniqueness
+        // 7. Bigram uniqueness (slightly reduced)
         function getBigrams(arr) {
             let bigrams = [];
             for (let i = 0; i < arr.length - 1; i++) {
@@ -156,11 +161,11 @@
             let uniqueBigrams = new Set(bigrams);
             let bigramRatio = uniqueBigrams.size / bigrams.length;
             if (bigramRatio < 0.5) {
-                score += 1.0;
+                score += 0.9; // from 1.0
             }
         }
 
-        // 8. Trigram uniqueness
+        // 8. Trigram uniqueness (slightly reduced)
         function getTrigrams(arr) {
             let trigrams = [];
             for (let i = 0; i < arr.length - 2; i++) {
@@ -173,7 +178,7 @@
             let uniqueTrigrams = new Set(trigrams);
             let trigramRatio = uniqueTrigrams.size / trigrams.length;
             if (trigramRatio < 0.6) {
-                score += 0.8;
+                score += 0.7; // from 0.8
             }
         }
 
@@ -250,10 +255,11 @@
     }
 
     /***********************
-     * BOT SCORE (Non-AI) CALCULATION
+     * BOT SCORE
      ***********************/
     function computeBotScore(elem) {
         let score = 0;
+        // Attempt multiple possible selectors for user links
         const userElem = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
         if (userElem) {
             const username = userElem.innerText.trim();
@@ -322,6 +328,7 @@
      ***********************/
     let botCount = 0;
     let detectedBots = [];
+    let detectionIndex = 0; // For anchor ID assignment
 
     function createPopup() {
         let popup = document.getElementById("botCounterPopup");
@@ -361,10 +368,12 @@
             dropdown.style.borderTop = "1px solid #ccc";
             dropdown.style.paddingTop = "5px";
             popup.appendChild(dropdown);
+
             popup.addEventListener("click", function(e) {
                 e.stopPropagation();
                 dropdown.style.display = (dropdown.style.display === "none") ? "block" : "none";
             });
+
             document.body.appendChild(popup);
         }
     }
@@ -392,8 +401,16 @@
                 detectedBots.forEach(function(item) {
                     let entry = document.createElement("div");
                     entry.style.marginBottom = "5px";
-                    entry.innerHTML = "<strong>" + item.username + ":</strong> " + item.comment +
-                                        " (" + item.reason + ")";
+
+                    // Link to jump to the flagged comment
+                    let link = document.createElement("a");
+                    link.href = "#" + item.elemID; // anchor link
+                    link.style.color = "inherit";
+                    link.style.textDecoration = "none";
+                    link.style.cursor = "pointer";
+                    link.innerText = item.username;
+
+                    entry.appendChild(link);
                     dropdown.appendChild(entry);
                 });
             }
@@ -415,7 +432,8 @@
             } else {
                 reason = "Bot";
             }
-            // Outline the flagged element
+
+            // Outline
             if (reason === "Bot") {
                 elem.style.outline = "3px dashed red";
             } else if (reason === "AI") {
@@ -426,9 +444,13 @@
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
 
-            // If reason includes "Bot", style the username
+            // Assign an ID so we can anchor to it
+            detectionIndex++;
+            const elemID = "botbuster-detected-" + detectionIndex;
+            elem.setAttribute("id", elemID);
+
+            // If reason includes "bot", style the username
             if (reason.toLowerCase().includes("bot")) {
-                // Attempt to match multiple possible selectors
                 const userLinks = elem.querySelectorAll(
                   'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]'
                 );
@@ -437,21 +459,21 @@
                 });
             }
 
-            // Record the detection if not already
+            // Record
             if (!elem.getAttribute("data-bot-recorded")) {
                 let userElemForRecord = elem.querySelector(
                   'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]'
                 );
                 let username = userElemForRecord ? userElemForRecord.innerText.trim() : "Unknown";
-                let comment = elem.innerText.trim();
-                if (comment.length > 100) {
-                    comment = comment.substring(0, 100) + "...";
-                }
-                detectedBots.push({ username: username, comment: comment, reason: reason });
+                // We only store the username and an anchor ID
+                detectedBots.push({
+                    username: username,
+                    elemID: elemID
+                });
                 elem.setAttribute("data-bot-recorded", "true");
             }
             updatePopup();
-            console.log("Advanced Detector: Highlighted element with", scores.totalScore, "red flags.");
+            console.log("BotBuster: Highlighted element with", scores.totalScore, "red flags. Reason:", reason);
         }
     }
 
@@ -474,7 +496,7 @@
     }
 
     /***********************
-     * INITIALIZATION & DYNAMIC OBSERVATION
+     * OBSERVATION
      ***********************/
     scanForBots();
 
