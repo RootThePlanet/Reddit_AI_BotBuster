@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit AI BotBuster
 // @namespace    http://tampermonkey.net/
-// @version      2.11.11
+// @version      2.11.18
 // @description  Detects suspected bot accounts and AI-generated content on both new and old Reddit using advanced heuristics. Established accounts (>5 years) aren’t flagged as bots.
 // @match        https://www.reddit.com/*
 // @match        https://old.reddit.com/*
@@ -12,17 +12,13 @@
 (function() {
     'use strict';
 
-    console.log("BotBuster: Script loaded (v2.11.11)");
+    console.log("BotBuster: Script loaded (v2.11.18)");
 
     /***********************
-     * Inject CSS for Bot Username Styling
+     * Inject CSS for Basic Styling
      ***********************/
     const style = document.createElement("style");
     style.innerHTML = `
-        .botUsername {
-            color: orange !important;
-            font-size: 14px !important;
-        }
         html {
             scroll-behavior: smooth;
         }
@@ -32,8 +28,12 @@
     /***********************
      * CONFIGURATION & THRESHOLDS
      ***********************/
-    const BOT_THRESHOLD = 2;    // For bot username detection.
-    const AI_THRESHOLD  = 3;    // For AI-generated content detection.
+    const BOT_THRESHOLD = 2; // For bot username detection.
+    let AI_THRESHOLD = 3;    // For AI-generated content detection.
+    // Lower AI threshold on old Reddit since content may score lower.
+    if (window.location.hostname.indexOf("old.reddit.com") !== -1) {
+        AI_THRESHOLD = 2.5;
+    }
 
     const suspiciousUserPatterns = [
         /bot/i,
@@ -260,21 +260,33 @@
      ***********************/
     function computeBotScore(elem) {
         let score = 0;
-        let userElem = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
-        // If no traditional user link and element is <shreddit-post>, simulate a user link using its "author" attribute.
+        // Try to get a traditional user link or an element with class "author".
+        let userElem = elem.querySelector('a[data-click-id="user"], a.author, a[href*="/user/"]');
+        let username = "";
         if (!userElem && elem.tagName.toLowerCase() === 'shreddit-post') {
-            userElem = document.createElement('span');
-            userElem.innerText = elem.getAttribute('author') || "";
+            username = elem.getAttribute('author') || "";
+        } else if (userElem) {
+            username = userElem.innerText.trim();
         }
-        if (userElem) {
-            const username = userElem.innerText.trim();
-            let ageInMonths = getAccountAge(userElem);
-            // Only add username-based signals if account age is 5 years (60 months) or less.
-            if (ageInMonths === null || ageInMonths <= 60) {
-                if (username) { score += computeUsernameBotScore(username); }
-                if (isNewAccount(userElem)) { score += 2; }
-                if (ageInMonths !== null && ageInMonths < 2) { score += 1; }
+        // If still not found, try data-author attribute.
+        if (!username) {
+            let dataAuthor = elem.getAttribute('data-author') || "";
+            if (!dataAuthor) {
+                let parent = elem.closest('[data-author]');
+                if (parent) {
+                    dataAuthor = parent.getAttribute('data-author') || "";
+                }
             }
+            if (dataAuthor) {
+                username = dataAuthor;
+            }
+        }
+        let ageInMonths = userElem ? getAccountAge(userElem) : null;
+        // Only add username-based signals if account age is 5 years (60 months) or less.
+        if (ageInMonths === null || ageInMonths <= 60) {
+            if (username) { score += computeUsernameBotScore(username); }
+            if (userElem && isNewAccount(userElem)) { score += 2; }
+            if (ageInMonths !== null && ageInMonths < 2) { score += 1; }
         }
         let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
         genericResponses.forEach(phrase => { if (textContent === phrase) { score++; } });
@@ -296,6 +308,8 @@
     function countRedFlags(elem) {
         const botScore = computeBotScore(elem);
         const aiScore = computeAIScore(elem.innerText);
+        // For debugging, log computed AI score.
+        console.log("Computed AI score for element:", aiScore);
         return { botScore, aiScore, totalScore: botScore + aiScore };
     }
 
@@ -393,30 +407,38 @@
         const aiFlag = flags.aiScore >= AI_THRESHOLD;
         if (botFlag || aiFlag) {
             if (aiFlag) {
-                elem.style.outline = botFlag ? "3px dashed purple" : "3px dashed blue";
+                if (botFlag) {
+                    elem.style.setProperty("outline", "3px dashed purple", "important");
+                } else {
+                    elem.style.setProperty("outline", "3px dashed blue", "important");
+                }
             }
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
             detectionIndex++;
             const elemID = "botbuster-detected-" + detectionIndex;
             elem.setAttribute("id", elemID);
-            if (botFlag) {
-                let userElem = elem.querySelector('a[data-click-id="user"]');
-                if (!userElem && elem.tagName.toLowerCase() === 'shreddit-post') {
-                    userElem = document.createElement('span');
-                    userElem.innerText = elem.getAttribute('author') || "";
+            let username = "";
+            let userElem = elem.querySelector('a[data-click-id="user"], a.author, a[href*="/user/"]');
+            if (userElem) {
+                username = userElem.innerText.trim();
+                let age = getAccountAge(userElem);
+                if (age === null || age <= 60) {
+                    userElem.style.setProperty("color", "orange", "important");
+                    userElem.style.setProperty("font-size", "14px", "important");
                 }
-                if (userElem) {
-                    let age = getAccountAge(userElem);
-                    if (age === null || age <= 60) {
-                        userElem.classList.add("botUsername");
-                    }
+            } else if (elem.tagName.toLowerCase() === 'shreddit-post') {
+                username = elem.getAttribute('author') || "";
+                if (username) {
+                    elem.style.border = "2px dashed orange";
                 }
+            } else if (elem.hasAttribute('data-author')) {
+                username = elem.getAttribute('data-author');
+            }
+            if (!username) {
+                username = "Unknown";
             }
             if (!elem.getAttribute("data-bot-recorded")) {
-                let userElemForRecord = elem.querySelector('a[data-click-id="user"]') || 
-                                         (elem.tagName.toLowerCase() === 'shreddit-post' ? { innerText: elem.getAttribute('author') } : null);
-                let username = userElemForRecord ? userElemForRecord.innerText.trim() : "Unknown";
                 detectedBots.push({ username: username, elemID: elemID });
                 elem.setAttribute("data-bot-recorded", "true");
             }
@@ -429,7 +451,7 @@
      * SCANNING FUNCTIONS
      ***********************/
     function scanForUserLinks(root = document) {
-        const userLinks = root.querySelectorAll('a[data-click-id="user"]');
+        const userLinks = root.querySelectorAll('a[data-click-id="user"], a.author, a[href*="/user/"]');
         userLinks.forEach(link => {
             let container = link.closest('article, shreddit-post, div[data-testid="post-container"], div[data-testid="comment"], div.Comment, div.Post, div.scrollerItem, div[slot="comment"]');
             if (container) {
@@ -450,7 +472,7 @@
             'div[data-testid="post-container"]',
             'div[data-testid="comment"]',
             'div[data-test-id="comment"]',
-            'div[slot="comment"]',  // Added new selector for comments.
+            'div[slot="comment"]',
             'div.scrollerItem',
             'div.thing',
             'div.Comment',
@@ -465,7 +487,7 @@
             }
             botBusterHighlight(candidate);
         });
-        // Recursively scan shadow roots.
+        // Recursively scan for shadow roots.
         const allElems = root.querySelectorAll("*");
         allElems.forEach(el => {
             if (el.shadowRoot) {
