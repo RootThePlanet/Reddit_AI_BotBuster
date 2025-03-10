@@ -1,0 +1,495 @@
+// ==UserScript==
+// @name         Reddit AI BotBuster
+// @namespace    http://tampermonkey.net/
+// @version      2.11.11
+// @description  Detects suspected bot accounts and AI-generated content on both new and old Reddit using advanced heuristics. Established accounts (>5 years) aren’t flagged as bots.
+// @match        https://www.reddit.com/*
+// @match        https://old.reddit.com/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    console.log("BotBuster: Script loaded (v2.11.11)");
+
+    /***********************
+     * Inject CSS for Bot Username Styling
+     ***********************/
+    const style = document.createElement("style");
+    style.innerHTML = `
+        .botUsername {
+            color: orange !important;
+            font-size: 14px !important;
+        }
+        html {
+            scroll-behavior: smooth;
+        }
+    `;
+    document.head.appendChild(style);
+
+    /***********************
+     * CONFIGURATION & THRESHOLDS
+     ***********************/
+    const BOT_THRESHOLD = 2;    // For bot username detection.
+    const AI_THRESHOLD  = 3;    // For AI-generated content detection.
+
+    const suspiciousUserPatterns = [
+        /bot/i,
+        /^[A-Za-z]+-[A-Za-z]+\d{4}$/,
+        /^[A-Za-z]+[A-Za-z]+\d+$/,
+        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/
+    ];
+
+    // Define generic responses and scam regex early.
+    const genericResponses = [
+        "i agree dude",
+        "yes you are right",
+        "well said",
+        "totally agree",
+        "i agree",
+        "right you are",
+        "well spoken, you are",
+        "perfectly said this is"
+    ];
+    const scamLinkRegex = /\.(live|life|shop)\b/i;
+
+    /***********************
+     * Helper Functions: Username & Account Age
+     ***********************/
+    function computeUsernameBotScore(username) {
+        let score = 0;
+        if (username.toLowerCase().includes("bot")) { score += 0.5; }
+        suspiciousUserPatterns.forEach(pattern => {
+            if (pattern.test(username)) { score += 0.5; }
+        });
+        let vowels = username.match(/[aeiou]/gi);
+        let vowelRatio = vowels ? vowels.length / username.length : 0;
+        if (vowelRatio < 0.3) { score += 0.5; }
+        let digits = username.match(/\d/g);
+        if (digits && (digits.length / username.length) > 0.5) { score += 0.5; }
+        if (username.length < 4 || username.length > 20) { score += 0.5; }
+        return score;
+    }
+
+    function isNewAccount(userElem) {
+        const titleAttr = userElem.getAttribute('title') || "";
+        return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
+    }
+
+    function getAccountAge(userElem) {
+        const titleAttr = userElem.getAttribute('title') || "";
+        const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
+        if (match) {
+            let value = parseInt(match[1]);
+            let unit = match[2].toLowerCase();
+            if (unit === "day") return value / 30;
+            if (unit === "week") return (value * 7) / 30;
+            if (unit === "month") return value;
+            if (unit === "year") return value * 12;
+        }
+        return null;
+    }
+
+    const commentTextMap = new Map();
+
+    /***********************
+     * READABILITY HELPER FUNCTIONS
+     ***********************/
+    function countSyllables(word) {
+        word = word.toLowerCase();
+        if (word.length <= 3) { return 1; }
+        word = word.replace(/e\b/g, "");
+        let matches = word.match(/[aeiouy]{1,}/g);
+        return matches ? matches.length : 1;
+    }
+
+    function computeReadabilityScore(text) {
+        let sentenceMatches = text.match(/[^.!?]+[.!?]+/g);
+        if (!sentenceMatches) return null;
+        let sentences = sentenceMatches;
+        let words = text.split(/\s+/).filter(w => w.length > 0);
+        let sentenceCount = sentences.length;
+        let wordCount = words.length;
+        let syllableCount = 0;
+        words.forEach(word => { syllableCount += countSyllables(word); });
+        let flesch = 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount);
+        return flesch;
+    }
+
+    /***********************
+     * ADVANCED AI DETECTION HELPER FUNCTIONS
+     ***********************/
+    function computeSemanticCoherenceScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length < 2) return 0;
+        let similarities = [];
+        for (let i = 0; i < sentences.length - 1; i++) {
+            let s1 = new Set(sentences[i].toLowerCase().split(/\s+/));
+            let s2 = new Set(sentences[i+1].toLowerCase().split(/\s+/));
+            let intersection = new Set([...s1].filter(x => s2.has(x)));
+            let union = new Set([...s1, ...s2]);
+            let jaccard = union.size ? intersection.size / union.size : 0;
+            similarities.push(jaccard);
+        }
+        let avgSim = similarities.reduce((a, b) => a + b, 0) / similarities.length;
+        return avgSim < 0.2 ? 0.6 : 0;
+    }
+
+    function computeProperNounConsistencyScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length < 2) return 0;
+        let counts = sentences.map(sentence => {
+            let words = sentence.split(/\s+/);
+            let properNouns = words.slice(1).filter(word => /^[A-Z][a-z]+/.test(word));
+            return properNouns.length;
+        });
+        let avg = counts.reduce((a, b) => a + b, 0) / counts.length;
+        let variance = counts.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / counts.length;
+        return variance > 2 ? 0.3 : 0;
+    }
+
+    function computeContextShiftScore(text) {
+        let words = text.split(/\s+/).filter(w => w.length > 0);
+        if (words.length < 10) return 0;
+        let half = Math.floor(words.length / 2);
+        let firstHalf = words.slice(0, half);
+        let secondHalf = words.slice(half);
+        let freq = arr => {
+            let f = {};
+            arr.forEach(word => { f[word] = (f[word] || 0) + 1; });
+            return f;
+        };
+        let f1 = freq(firstHalf), f2 = freq(secondHalf);
+        let allWords = new Set([...Object.keys(f1), ...Object.keys(f2)]);
+        let dot = 0, norm1 = 0, norm2 = 0;
+        allWords.forEach(word => {
+            let v1 = f1[word] || 0;
+            let v2 = f2[word] || 0;
+            dot += v1 * v2;
+            norm1 += v1 * v1;
+            norm2 += v2 * v2;
+        });
+        let cosSim = (norm1 && norm2) ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0;
+        return cosSim < 0.3 ? 0.6 : 0;
+    }
+
+    function computeSyntaxScore(text) {
+        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length === 0) return 0;
+        let punctuationMatches = text.match(/[,\;:\-]/g);
+        let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
+        let avgPunctuation = punctuationCount / sentences.length;
+        return avgPunctuation < 1 ? 0.9 : 0;
+    }
+
+    function computeAIScore(text) {
+        let score = 0;
+        let lowerText = text.toLowerCase();
+        if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
+            score += 1.8;
+        }
+        let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
+        let words = lowerText.split(/\s+/);
+        let wordCount = words.length;
+        if (wordCount > 150 && (!contractions || contractions.length === 0)) {
+            score += 1.2;
+        }
+        const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
+        aiPhrases.forEach(phrase => { if (lowerText.includes(phrase)) { score += 0.5; } });
+        const aiIndicators = [
+            "i do not have personal experiences",
+            "my training data",
+            "i cannot",
+            "i do not have the ability",
+            "apologies if",
+            "i apologize",
+            "i'm unable",
+            "as an ai",
+            "as an artificial intelligence"
+        ];
+        aiIndicators.forEach(phrase => { if (lowerText.includes(phrase)) { score += 1.0; } });
+        let sentencesArr = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentencesArr.length > 1) {
+            let lengths = sentencesArr.map(s => s.split(/\s+/).length);
+            let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+            let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
+            if (variance < 4) { score += 0.8; }
+        }
+        let uniqueWords = new Set(words);
+        let typeTokenRatio = uniqueWords.size / words.length;
+        if (words.length > 20 && typeTokenRatio < 0.3) { score += 1.0; }
+        function getBigrams(arr) {
+            let bigrams = [];
+            for (let i = 0; i < arr.length - 1; i++) {
+                bigrams.push(arr[i] + " " + arr[i+1]);
+            }
+            return bigrams;
+        }
+        let bigrams = getBigrams(words);
+        if (bigrams.length > 0) {
+            let uniqueBigrams = new Set(bigrams);
+            let bigramRatio = uniqueBigrams.size / bigrams.length;
+            if (bigramRatio < 0.5) { score += 0.8; }
+        }
+        function getTrigrams(arr) {
+            let trigrams = [];
+            for (let i = 0; i < arr.length - 2; i++) {
+                trigrams.push(arr[i] + " " + arr[i+1] + " " + arr[i+2]);
+            }
+            return trigrams;
+        }
+        let trigrams = getTrigrams(words);
+        if (trigrams.length > 0) {
+            let uniqueTrigrams = new Set(trigrams);
+            let trigramRatio = uniqueTrigrams.size / trigrams.length;
+            if (trigramRatio < 0.6) { score += 0.8; }
+        }
+        score += computeSemanticCoherenceScore(text); // 0.6
+        score += computeProperNounConsistencyScore(text); // 0.3
+        score += computeContextShiftScore(text); // 0.6
+        score += computeSyntaxScore(text); // 0.9
+        let readability = computeReadabilityScore(text);
+        if (readability !== null && readability > 80) { score += 0.55; }
+        return score;
+    }
+
+    /***********************
+     * BOT SCORE CALCULATION
+     ***********************/
+    function computeBotScore(elem) {
+        let score = 0;
+        let userElem = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
+        // If no traditional user link and element is <shreddit-post>, simulate a user link using its "author" attribute.
+        if (!userElem && elem.tagName.toLowerCase() === 'shreddit-post') {
+            userElem = document.createElement('span');
+            userElem.innerText = elem.getAttribute('author') || "";
+        }
+        if (userElem) {
+            const username = userElem.innerText.trim();
+            let ageInMonths = getAccountAge(userElem);
+            // Only add username-based signals if account age is 5 years (60 months) or less.
+            if (ageInMonths === null || ageInMonths <= 60) {
+                if (username) { score += computeUsernameBotScore(username); }
+                if (isNewAccount(userElem)) { score += 2; }
+                if (ageInMonths !== null && ageInMonths < 2) { score += 1; }
+            }
+        }
+        let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
+        genericResponses.forEach(phrase => { if (textContent === phrase) { score++; } });
+        if (textContent.split(' ').length < 3) { score++; }
+        if (textContent.includes("&amp;") && !textContent.includes("& ")) { score++; }
+        if (textContent.startsWith('>') && textContent.split(' ').length < 5) { score++; }
+        if (textContent.length > 0) {
+            const count = commentTextMap.get(textContent) || 0;
+            if (count > 0) { score++; }
+        }
+        const links = elem.querySelectorAll('a');
+        links.forEach(link => {
+            if (scamLinkRegex.test(link.href)) { score++; }
+            if (link.parentElement && link.parentElement.innerText.includes("Powered by Gearlaunch")) { score++; }
+        });
+        return score;
+    }
+
+    function countRedFlags(elem) {
+        const botScore = computeBotScore(elem);
+        const aiScore = computeAIScore(elem.innerText);
+        return { botScore, aiScore, totalScore: botScore + aiScore };
+    }
+
+    /***********************
+     * DETECTIONS & POPUP
+     ***********************/
+    let botCount = 0;
+    let detectedBots = [];
+    let detectionIndex = 0;
+
+    function createPopup() {
+        let popup = document.getElementById("botCounterPopup");
+        if (!popup) {
+            popup = document.createElement("div");
+            popup.id = "botCounterPopup";
+            popup.style.position = "fixed";
+            popup.style.top = "40px";
+            popup.style.right = "10px";
+            popup.style.backgroundColor = "rgba(248,248,248,0.5)";
+            popup.style.border = "1px solid #ccc";
+            popup.style.padding = "10px";
+            popup.style.zIndex = "9999";
+            popup.style.fontFamily = "Roboto, sans-serif";
+            popup.style.fontSize = "12px";
+            popup.style.cursor = "pointer";
+            popup.style.backdropFilter = "blur(5px)";
+            popup.style.webkitBackdropFilter = "blur(5px)";
+            popup.style.width = "250px";
+            let header = document.createElement("div");
+            header.id = "botPopupHeader";
+            header.innerText = "Detected bot/AI content: " + botCount;
+            if (botCount < 10) { header.style.color = "green"; }
+            else if (botCount < 30) { header.style.color = "yellow"; }
+            else { header.style.color = "red"; }
+            popup.appendChild(header);
+            let dropdown = document.createElement("div");
+            dropdown.id = "botDropdown";
+            dropdown.style.display = "none";
+            dropdown.style.maxHeight = "300px";
+            dropdown.style.overflowY = "auto";
+            dropdown.style.marginTop = "10px";
+            dropdown.style.borderTop = "1px solid #ccc";
+            dropdown.style.paddingTop = "5px";
+            popup.appendChild(dropdown);
+            popup.addEventListener("click", function(e) {
+                e.stopPropagation();
+                dropdown.style.display = (dropdown.style.display === "none") ? "block" : "none";
+            });
+            document.body.appendChild(popup);
+        }
+    }
+
+    function updatePopup() {
+        let header = document.getElementById("botPopupHeader");
+        let dropdown = document.getElementById("botDropdown");
+        if (header) {
+            header.innerText = "Detected bot/AI content: " + botCount;
+            if (botCount < 10) { header.style.color = "green"; }
+            else if (botCount < 30) { header.style.color = "yellow"; }
+            else { header.style.color = "red"; }
+        }
+        if (dropdown) {
+            dropdown.innerHTML = "";
+            if (detectedBots.length === 0) {
+                let emptyMsg = document.createElement("div");
+                emptyMsg.innerText = "No bots/AI detected.";
+                dropdown.appendChild(emptyMsg);
+            } else {
+                detectedBots.forEach(function(item) {
+                    let entry = document.createElement("div");
+                    entry.style.marginBottom = "5px";
+                    let link = document.createElement("a");
+                    link.href = "#" + item.elemID;
+                    link.style.color = "inherit";
+                    link.style.textDecoration = "none";
+                    link.style.cursor = "pointer";
+                    link.innerText = item.username;
+                    entry.appendChild(link);
+                    dropdown.appendChild(entry);
+                });
+            }
+        }
+    }
+
+    createPopup();
+    updatePopup();
+
+    /***********************
+     * KEY FUNCTION: BotBuster Highlight
+     ***********************/
+    function botBusterHighlight(elem) {
+        if (elem.getAttribute("data-bot-detected") === "true") return;
+        const flags = countRedFlags(elem);
+        const botFlag = flags.botScore >= BOT_THRESHOLD;
+        const aiFlag = flags.aiScore >= AI_THRESHOLD;
+        if (botFlag || aiFlag) {
+            if (aiFlag) {
+                elem.style.outline = botFlag ? "3px dashed purple" : "3px dashed blue";
+            }
+            elem.setAttribute("data-bot-detected", "true");
+            botCount++;
+            detectionIndex++;
+            const elemID = "botbuster-detected-" + detectionIndex;
+            elem.setAttribute("id", elemID);
+            if (botFlag) {
+                let userElem = elem.querySelector('a[data-click-id="user"]');
+                if (!userElem && elem.tagName.toLowerCase() === 'shreddit-post') {
+                    userElem = document.createElement('span');
+                    userElem.innerText = elem.getAttribute('author') || "";
+                }
+                if (userElem) {
+                    let age = getAccountAge(userElem);
+                    if (age === null || age <= 60) {
+                        userElem.classList.add("botUsername");
+                    }
+                }
+            }
+            if (!elem.getAttribute("data-bot-recorded")) {
+                let userElemForRecord = elem.querySelector('a[data-click-id="user"]') || 
+                                         (elem.tagName.toLowerCase() === 'shreddit-post' ? { innerText: elem.getAttribute('author') } : null);
+                let username = userElemForRecord ? userElemForRecord.innerText.trim() : "Unknown";
+                detectedBots.push({ username: username, elemID: elemID });
+                elem.setAttribute("data-bot-recorded", "true");
+            }
+            updatePopup();
+            console.log("BotBuster: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
+        }
+    }
+
+    /***********************
+     * SCANNING FUNCTIONS
+     ***********************/
+    function scanForUserLinks(root = document) {
+        const userLinks = root.querySelectorAll('a[data-click-id="user"]');
+        userLinks.forEach(link => {
+            let container = link.closest('article, shreddit-post, div[data-testid="post-container"], div[data-testid="comment"], div.Comment, div.Post, div.scrollerItem, div[slot="comment"]');
+            if (container) {
+                botBusterHighlight(container);
+            }
+        });
+        const postElements = root.querySelectorAll('shreddit-post[author]');
+        postElements.forEach(post => {
+            botBusterHighlight(post);
+        });
+    }
+
+    function scanForBots(root = document) {
+        scanForUserLinks(root);
+        const selectors = [
+            'article',
+            'shreddit-post',
+            'div[data-testid="post-container"]',
+            'div[data-testid="comment"]',
+            'div[data-test-id="comment"]',
+            'div[slot="comment"]',  // Added new selector for comments.
+            'div.scrollerItem',
+            'div.thing',
+            'div.Comment',
+            'div.Post'
+        ];
+        const candidates = root.querySelectorAll(selectors.join(', '));
+        candidates.forEach(candidate => {
+            let textContent = candidate.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
+            if (textContent.length > 0) {
+                const currentCount = commentTextMap.get(textContent) || 0;
+                commentTextMap.set(textContent, currentCount + 1);
+            }
+            botBusterHighlight(candidate);
+        });
+        // Recursively scan shadow roots.
+        const allElems = root.querySelectorAll("*");
+        allElems.forEach(el => {
+            if (el.shadowRoot) {
+                scanForBots(el.shadowRoot);
+            }
+        });
+    }
+
+    /***********************
+     * INITIALIZATION & OBSERVATION
+     ***********************/
+    const mainContainer = document.querySelector("#SHORTCUT_FOCUSABLE_DIV") || document.body;
+    console.log("BotBuster: Using main container:", mainContainer);
+    scanForBots(mainContainer);
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    scanForBots(node);
+                }
+            });
+        });
+    });
+    observer.observe(mainContainer, { childList: true, subtree: true });
+    setInterval(() => { scanForBots(mainContainer); }, 3000);
+
+})();
