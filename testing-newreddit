@@ -1,0 +1,395 @@
+// ==UserScript==
+// @name         Reddit AI BotBuster (New Reddit Only - v2.13.0)
+// @namespace    http://tampermonkey.net/
+// @version      2.13.0
+// @description  Revised heuristics for detecting bot accounts and AI-generated content on new Reddit. Bot usernames are forced to orange (14px) and AI content is outlined.
+// @match        https://www.reddit.com/*
+// @exclude      https://old.reddit.com/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    console.log("BotBuster (New Reddit Only): Script loaded (v2.13.0)");
+
+    /***********************
+     * Inject basic CSS
+     ***********************/
+    const style = document.createElement("style");
+    style.innerHTML = `html { scroll-behavior: smooth; }`;
+    document.head.appendChild(style);
+
+    /***********************
+     * CONFIGURATION & THRESHOLDS
+     ***********************/
+    // These thresholds can be adjusted based on your testing.
+    const BOT_THRESHOLD = 1; // Lowered threshold for bot detection.
+    const AI_THRESHOLD  = 1; // Lowered threshold for AI detection.
+
+    // Patterns for suspicious usernames.
+    const suspiciousUserPatterns = [
+        /bot/i,
+        /^[A-Za-z]{3,}-[A-Za-z]+\d{4,}$/, // e.g. randomword-1234
+        /^[A-Za-z0-9]{6,}$/            // simple, short alphanumeric usernames
+    ];
+
+    // Generic responses that may be copied by bots.
+    const genericResponses = [
+        "i agree dude",
+        "yes you are right",
+        "well said",
+        "totally agree",
+        "i agree",
+        "right you are",
+        "well spoken, you are",
+        "perfectly said this is"
+    ];
+
+    const scamLinkRegex = /\.(live|life|shop)\b/i;
+
+    /***********************
+     * Helper Functions: Username & Account Age
+     ***********************/
+    function computeUsernameBotScore(username) {
+        let score = 0;
+        if (username.toLowerCase().includes("bot")) score += 0.5;
+        suspiciousUserPatterns.forEach(pattern => {
+            if (pattern.test(username)) { score += 0.5; }
+        });
+        // Check for low vowel ratio or excessive digits
+        let vowels = username.match(/[aeiou]/gi);
+        let vowelRatio = vowels ? vowels.length / username.length : 0;
+        if (vowelRatio < 0.3) score += 0.5;
+        let digits = username.match(/\d/g);
+        if (digits && (digits.length / username.length) > 0.5) score += 0.5;
+        if (username.length < 4 || username.length > 20) score += 0.5;
+        return score;
+    }
+
+    function isNewAccount(userElem) {
+        // Looks for phrases like "redditor for 3 days"
+        const titleAttr = userElem.getAttribute('title') || "";
+        return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
+    }
+
+    function getAccountAge(userElem) {
+        const titleAttr = userElem.getAttribute('title') || "";
+        const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
+        if (match) {
+            let value = parseInt(match[1]);
+            let unit = match[2].toLowerCase();
+            if (unit === "day") return value / 30;
+            if (unit === "week") return (value * 7) / 30;
+            if (unit === "month") return value;
+            if (unit === "year") return value * 12;
+        }
+        return null;
+    }
+
+    const commentTextMap = new Map();
+
+    /***********************
+     * READABILITY HELPER FUNCTIONS
+     ***********************/
+    function countSyllables(word) {
+        word = word.toLowerCase();
+        if (word.length <= 3) return 1;
+        word = word.replace(/e\b/g, "");
+        let matches = word.match(/[aeiouy]{1,}/g);
+        return matches ? matches.length : 1;
+    }
+
+    function computeReadabilityScore(text) {
+        let sentences = text.match(/[^.!?]+[.!?]+/g);
+        if (!sentences) return null;
+        let words = text.split(/\s+/).filter(w => w.length > 0);
+        let sentenceCount = sentences.length;
+        let wordCount = words.length;
+        let syllableCount = 0;
+        words.forEach(word => { syllableCount += countSyllables(word); });
+        let flesch = 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount);
+        return flesch;
+    }
+
+    /***********************
+     * ADVANCED AI DETECTION FUNCTIONS
+     ***********************/
+    function computeAIScore(text) {
+        let score = 0;
+        let lowerText = text.toLowerCase();
+
+        // Explicit AI phrases
+        const explicitPhrases = [
+            "as an ai language model",
+            "i am not a human",
+            "i am a language model",
+            "i am an ai",
+            "i am an artificial intelligence",
+            "i am a machine",
+            "as a machine learning model",
+            "based on my training"
+        ];
+        explicitPhrases.forEach(phrase => {
+            if (lowerText.includes(phrase)) score += 2;
+        });
+
+        // Absence of contractions: AI text may be overly formal.
+        let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
+        let words = lowerText.split(/\s+/);
+        if (words.length > 100 && (!contractions || contractions.length < words.length * 0.05)) {
+            score += 1;
+        }
+
+        // Sentence length uniformity as a proxy for lack of natural variation.
+        let sentences = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentences.length > 1) {
+            let lengths = sentences.map(s => s.split(/\s+/).length);
+            let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+            let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
+            if (variance < 5) score += 1;
+        }
+
+        // Repetitive phrase detection.
+        const repetitiveIndicators = ["the best", "in my opinion", "overall", "to sum up"];
+        repetitiveIndicators.forEach(phrase => {
+            let occurrences = (lowerText.match(new RegExp(phrase, "g")) || []).length;
+            if (occurrences > 1) score += 0.5;
+        });
+
+        return score;
+    }
+
+    /***********************
+     * BOT SCORE CALCULATION
+     ***********************/
+    function computeBotScore(elem) {
+        let score = 0;
+        // For new Reddit, use selectors that locate user links.
+        let userElem = elem.querySelector('a[data-testid="post_author_link"], a[data-click-id="user"], a.author, a[href*="/user/"]');
+        if (userElem) {
+            const username = userElem.innerText.trim();
+            let ageInMonths = getAccountAge(userElem);
+            if (ageInMonths === null || ageInMonths <= 60) {
+                score += computeUsernameBotScore(username);
+                if (isNewAccount(userElem)) score += 2;
+                if (ageInMonths !== null && ageInMonths < 2) score += 1;
+            }
+        }
+        // Additional signals from the post text.
+        let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
+        genericResponses.forEach(phrase => { if (textContent === phrase) score++; });
+        if (textContent.split(' ').length < 3) score++;
+        if (textContent.includes("&amp;") && !textContent.includes("& ")) score++;
+        if (textContent.startsWith('>') && textContent.split(' ').length < 5) score++;
+        if (textContent.length > 0) {
+            const count = commentTextMap.get(textContent) || 0;
+            if (count > 0) score++;
+        }
+        const links = elem.querySelectorAll('a');
+        links.forEach(link => {
+            if (scamLinkRegex.test(link.href)) score++;
+            if (link.parentElement && link.parentElement.innerText.includes("Powered by Gearlaunch")) score++;
+        });
+        return score;
+    }
+
+    function countRedFlags(elem) {
+        const botScore = computeBotScore(elem);
+        const aiScore = computeAIScore(elem.innerText);
+        console.log("Computed AI score:", aiScore, "for element:", elem);
+        return { botScore, aiScore, totalScore: botScore + aiScore };
+    }
+
+    /***********************
+     * DETECTION & POPUP LOGIC
+     ***********************/
+    let botCount = 0;
+    let detectedBots = [];
+    let detectionIndex = 0;
+
+    function createPopup() {
+        let popup = document.getElementById("botCounterPopup");
+        if (!popup) {
+            popup = document.createElement("div");
+            popup.id = "botCounterPopup";
+            popup.style.position = "fixed";
+            popup.style.top = "40px";
+            popup.style.right = "10px";
+            popup.style.backgroundColor = "rgba(248,248,248,0.5)";
+            popup.style.border = "1px solid #ccc";
+            popup.style.padding = "10px";
+            popup.style.zIndex = "9999";
+            popup.style.fontFamily = "Roboto, sans-serif";
+            popup.style.fontSize = "12px";
+            popup.style.cursor = "pointer";
+            popup.style.backdropFilter = "blur(5px)";
+            popup.style.webkitBackdropFilter = "blur(5px)";
+            popup.style.width = "250px";
+            let header = document.createElement("div");
+            header.id = "botPopupHeader";
+            header.innerText = "Detected bot/AI content: " + botCount;
+            header.style.color = botCount < 10 ? "green" : botCount < 30 ? "yellow" : "red";
+            popup.appendChild(header);
+            let dropdown = document.createElement("div");
+            dropdown.id = "botDropdown";
+            dropdown.style.display = "none";
+            dropdown.style.maxHeight = "300px";
+            dropdown.style.overflowY = "auto";
+            dropdown.style.marginTop = "10px";
+            dropdown.style.borderTop = "1px solid #ccc";
+            dropdown.style.paddingTop = "5px";
+            popup.appendChild(dropdown);
+            popup.addEventListener("click", function(e) {
+                e.stopPropagation();
+                dropdown.style.display = (dropdown.style.display === "none") ? "block" : "none";
+            });
+            document.body.appendChild(popup);
+        }
+    }
+
+    function updatePopup() {
+        let header = document.getElementById("botPopupHeader");
+        let dropdown = document.getElementById("botDropdown");
+        if (header) {
+            header.innerText = "Detected bot/AI content: " + botCount;
+            header.style.color = botCount < 10 ? "green" : botCount < 30 ? "yellow" : "red";
+        }
+        if (dropdown) {
+            dropdown.innerHTML = "";
+            if (detectedBots.length === 0) {
+                let emptyMsg = document.createElement("div");
+                emptyMsg.innerText = "No bots/AI detected.";
+                dropdown.appendChild(emptyMsg);
+            } else {
+                detectedBots.forEach(function(item) {
+                    let entry = document.createElement("div");
+                    entry.style.marginBottom = "5px";
+                    let link = document.createElement("a");
+                    link.href = "#" + item.elemID;
+                    link.style.color = "inherit";
+                    link.style.textDecoration = "none";
+                    link.style.cursor = "pointer";
+                    link.innerText = item.username;
+                    entry.appendChild(link);
+                    dropdown.appendChild(entry);
+                });
+            }
+        }
+    }
+
+    createPopup();
+    updatePopup();
+
+    /***********************
+     * KEY FUNCTION: highlightIfSuspected
+     ***********************/
+    function highlightIfSuspected(elem) {
+        // Prevent duplicate flagging by checking ancestors.
+        if (elem.closest("[data-bot-detected='true']")) return;
+        if (elem.getAttribute("data-bot-detected") === "true") return;
+        const flags = countRedFlags(elem);
+        const botFlag = flags.botScore >= BOT_THRESHOLD;
+        const aiFlag = flags.aiScore >= AI_THRESHOLD;
+        if (botFlag || aiFlag) {
+            if (aiFlag) {
+                // Outline with blue if only AI, purple if both.
+                elem.style.setProperty("outline", botFlag ? "3px dashed purple" : "3px dashed blue", "important");
+            }
+            elem.setAttribute("data-bot-detected", "true");
+            botCount++;
+            detectionIndex++;
+            const elemID = "botbuster-detected-" + detectionIndex;
+            elem.setAttribute("id", elemID);
+            let username = "";
+            let userElem = elem.querySelector('a[data-testid="post_author_link"], a[data-click-id="user"], a.author, a[href*="/user/"]');
+            if (userElem) {
+                username = userElem.innerText.trim();
+                let age = getAccountAge(userElem);
+                if (age === null || age <= 60) {
+                    userElem.style.setProperty("color", "orange", "important");
+                    userElem.style.setProperty("font-size", "14px", "important");
+                }
+            } else if (elem.tagName.toLowerCase() === 'shreddit-post') {
+                username = elem.getAttribute('author') || "";
+                if (username) {
+                    elem.style.border = "2px dashed orange";
+                }
+            } else if (elem.hasAttribute('data-author')) {
+                username = elem.getAttribute('data-author');
+            }
+            if (!username) { username = "Unknown"; }
+            if (!elem.getAttribute("data-bot-recorded")) {
+                detectedBots.push({ username: username, elemID: elemID });
+                elem.setAttribute("data-bot-recorded", "true");
+            }
+            updatePopup();
+            console.log("BotBuster: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
+        }
+    }
+
+    /***********************
+     * SCANNING FUNCTIONS (New Reddit Only)
+     ***********************/
+    function scanForUserLinks(root = document) {
+        const userLinks = root.querySelectorAll('a[data-testid="post_author_link"], a[data-click-id="user"], a.author, a[href*="/user/"]');
+        userLinks.forEach(link => {
+            let container = link.closest('article, shreddit-post, div[data-testid="post-container"], div[data-testid="comment"], div[slot="comment"], div.scrollerItem');
+            if (container) {
+                highlightIfSuspected(container);
+            }
+        });
+        const postElements = root.querySelectorAll('shreddit-post[author]');
+        postElements.forEach(post => {
+            highlightIfSuspected(post);
+        });
+    }
+
+    function scanForBots(root = document) {
+        scanForUserLinks(root);
+        const selectors = [
+            'article',
+            'shreddit-post',
+            'div[data-testid="post-container"]',
+            'div[data-testid="comment"]',
+            'div[slot="comment"]',
+            'div.scrollerItem'
+        ];
+        const candidates = root.querySelectorAll(selectors.join(', '));
+        candidates.forEach(candidate => {
+            let textContent = candidate.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
+            if (textContent.length > 0) {
+                const currentCount = commentTextMap.get(textContent) || 0;
+                commentTextMap.set(textContent, currentCount + 1);
+            }
+            highlightIfSuspected(candidate);
+        });
+        // Recursively scan for shadow roots.
+        const allElems = root.querySelectorAll("*");
+        allElems.forEach(el => {
+            if (el.shadowRoot) {
+                scanForBots(el.shadowRoot);
+            }
+        });
+    }
+
+    /***********************
+     * INITIALIZATION & OBSERVATION (New Reddit Only)
+     ***********************/
+    const mainContainer = document.querySelector("#SHORTCUT_FOCUSABLE_DIV") || document.body;
+    console.log("BotBuster (New Reddit Only): Using main container:", mainContainer);
+    scanForBots(mainContainer);
+    const observer = new MutationObserver(mutations => {
+        mutations.forEach(mutation => {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    scanForBots(node);
+                }
+            });
+        });
+    });
+    observer.observe(mainContainer, { childList: true, subtree: true });
+    setInterval(() => { scanForBots(document); }, 3000);
+
+})();
