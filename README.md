@@ -1,43 +1,67 @@
 # Reddit AI BotBuster
-Reddit AI BotBuster is a userscript that spots potential bots and AI posts on Reddit. It scans as you browse, highlighting suspicious content with color-coded outlines and shows a popup with usernames and snippets.
 
-## Description
+## Reddit AI BotBuster is an advanced userscript that detects potential AI-generated content and bot accounts on Reddit, providing a transparent, configurable, and powerful set of tools to help you identify inauthentic content as you browse.
 
-This Tampermonkey userscript scans Reddit pages in real time for posts and comments that exhibit AI- or bot-like characteristics. Using advanced heuristics with fractional weights, the script analyzes features like explicit AI disclaimers, lack of contractions, repetitive sentence structure (low burstiness), reduced lexical diversity, and low bigram uniqueness. It further enhances detection with basic semantic coherence, proper noun consistency, context shift, and syntactic complexity analyses.
+    🚨 Compatibility Notice
 
-A unique feature of this version is that it factors in the user's account age—if a user’s account is less than **2 months old**, a small penalty is applied, increasing the likelihood of flagging very new accounts. Flagged elements are outlined (red for bot-like, blue for AI-like, purple for mixed signals), and a persistent popup in the top-right corner shows a count and details of all flagged items.
+    As of version 4.1.0, this script is optimized for and fully functional on old.reddit.com. Functionality on the new Reddit design (www.reddit.com) is not guaranteed and may be unreliable. For the best experience, please use the script with Old Reddit.
 
-## Installation & Usage
+## Core Features
 
-1. **Install Tampermonkey:**  
-   Add the [Tampermonkey extension](https://www.tampermonkey.net/) to your browser.
+    -Real-Time Scanning: Uses an efficient MutationObserver to scan posts and comments as they appear on the page, including with infinite scroll.
+    -Confidence-Based Highlighting: AI-generated content is highlighted with different outlines based on the detection confidence score, allowing you to see at a glance what's "possibly AI" versus "very likely AI."
+    -On-Hover Score Breakdown: Hover over any highlighted comment to see a detailed tooltip explaining why it was flagged, including which heuristics were triggered and the score breakdown.
+    -Configurable Sensitivity: Don't like the default settings? Open the settings panel directly from the popup to adjust the AI and Bot detection thresholds to your preference. Your settings are saved locally.
+    -Advanced Heuristic Engine: The script's detection engine is built on principles from modern AI detection methodologies.
 
-2. **Create a New Script:**  
-   Click the Tampermonkey icon, select “Create a new script…”, and delete any pre-filled code.
+## How It Works: The Detection Engine
 
-3. **Paste the Script Code:**  
-   Copy the entire script code (from the file provided) and paste it into the editor.
+The script analyzes content using a multi-layered heuristic engine inspired by professional detection tools.
 
-4. **Save & Enable:**  
-   Save the script and ensure it is enabled. Then, reload Reddit pages.
+    -Stylometry & Linguistic Fingerprinting: The script analyzes the author's writing style. It looks for an overly formal tone, a lack of common contractions, and an objective, encyclopedic voice that often lacks personal opinion or experience.
+    -Burstiness & Variation: Human writing has a natural rhythm with varying sentence lengths. The script measures this "burstiness." AI-generated text often has a uniform, consistent sentence structure, which results in a low burstiness score.
+    -Paraphrase Shield: To combat users who use tools to rephrase AI content, the script includes a heuristic that detects the "anomalous use of synonyms". It flags text that uses an unnaturally high number of complex words where simpler ones would suffice—a key trait of paraphrased content.
+    -Bot & Spam Heuristics: The script also runs checks for classic bot indicators, including suspicious username patterns (e.g., Word-Word1234) and links to known spam domains.
 
-5. **View Results:**  
-   The script will scan posts and comments dynamically. Flagged items will be highlighted, and you can click the popup in the top-right to view details.
+## Installation
 
-## Notes
+    -Install a Userscript Manager: You need an extension like Tampermonkey for your browser (Chrome, Firefox, Edge, Safari).
+    -Install the Script:
+        --Click the Tampermonkey icon in your browser and select "Create a new script...".
+        --Delete the default code that appears in the editor.
+        --Copy the entire main.js script code.
+        --Paste the code into the empty Tampermonkey editor.
+    -Save: Press Ctrl+S or go to File > Save. Ensure the script is enabled in your Tampermonkey dashboard.
+    -Browse Reddit: The script is now active. Remember to use it on old.reddit.com for best results.
 
-- **Threshold & Weights:**  
-  The detection threshold is set to 5. Fractional weights were tuned to reduce false positives while still capturing suspicious AI-like patterns.
+## Usage Guide
 
-- **Dynamic Content:**  
-  The script uses a MutationObserver and a periodic scan (every 3 seconds) to handle new and expanding content.
+    Reading the Highlights:
+        -Light Blue Dashed Outline = Low Confidence AI content.
+        -Medium Blue Dashed Outline = Medium Confidence AI content.
+        -Dark Blue Solid Outline = High Confidence AI content.
+        -Purple Dashed Outline = Flagged as both Bot & AI.
+        -Orange Username = Indicates a suspected bot account.
 
-- **Further Adjustments:**  
-  You can tweak the weights or threshold directly in the script if needed.
+    Viewing Details:
+        -Hover your mouse over any highlighted comment to see a detailed tooltip with the exact scores and the reasons for the flag.
+        -Click the popup in the top-right corner to see a list of all detected items on the page.
 
-Enjoy a more authentic Reddit experience with enhanced detection of automated and AI-generated content!
+    Adjusting Settings:
+        -Click the ⚙️ gear icon in the popup to open the settings panel.
+        -Change the threshold values and click "Save". Higher numbers make the script less sensitive.
 
+## Configuration
 
-[![new.png](https://i.postimg.cc/3rqfM41M/new.png)](https://postimg.cc/CdjskK9J)
+The detection thresholds for both AI and Bot scoring are configurable via the UI. The default values are:
 
-[![2025-03-08-0-07-43.png](https://i.postimg.cc/HxRNtVPC/2025-03-08-0-07-43.png)](https://postimg.cc/62VzW5XH)
+    AI Threshold: 4.0
+    Bot Threshold: 2.9
+
+Your custom settings are saved in your browser's local storage and will persist across sessions.
+
+[![ai-detection-low-confidence.png](https://i.postimg.cc/YC4cBB4T/ai-detection-low-confidence.png)](https://postimg.cc/3kHf26FZ)
+[![bot-username-detection.png](https://i.postimg.cc/q7n9gcxL/bot-username-detection.png)](https://postimg.cc/HJYShyKc)
+[![configure-thresholds-options.png](https://i.postimg.cc/Cx93Frk5/configure-thresholds-options.png)](https://postimg.cc/NK7JD4Nv)
+[![detected-bots-and-ai.png](https://i.postimg.cc/gJW1hwMP/detected-bots-and-ai.png)](https://postimg.cc/FfTP5K5P)
+
