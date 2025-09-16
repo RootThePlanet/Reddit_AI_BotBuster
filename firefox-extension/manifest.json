@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Reddit AI BotBuster",
+  "description": "Detect suspected bot accounts and AI-generated content on Reddit using advanced heuristics.",
+  "version": "2.10.3",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "reddit-aibotbuster@example.com"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.reddit.com/*",
+        "*://old.reddit.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
