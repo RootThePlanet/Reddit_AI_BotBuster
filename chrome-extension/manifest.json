@@ -3,23 +3,19 @@
   "name": "Reddit AI BotBuster",
   "description": "Detect suspected bot accounts and AI-generated content on Reddit using advanced heuristics.",
   "version": "2.10.3",
-  "browser_specific_settings": {
-    "gecko": {
-      "id": "reddit-aibotbuster@example.com"
-    }
-  },
   "icons": {
+    "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
-    "96": "icons/icon-96.png",
     "128": "icons/icon-128.png"
   },
   "action": {
     "default_title": "Reddit AI BotBuster",
     "default_icon": {
+      "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",
-      "96": "icons/icon-96.png"
+      "128": "icons/icon-128.png"
     }
   },
   "content_scripts": [
