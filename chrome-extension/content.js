@@ -80,7 +80,7 @@
                 BOT_THRESHOLD = result.bot_threshold;
                 callback();
             })
-            .catch(() => { callback(); });
+            .catch(err => { console.warn('BotBuster: Failed to load settings:', err); callback(); });
     }
 
     function saveSettings(aiVal, botVal) {
@@ -97,7 +97,8 @@
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function countSyllables(word) {
@@ -412,6 +413,9 @@
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType === Node.ELEMENT_NODE) {
+                        // Trigger one debounced full-page scan rather than per-node scans.
+                        // The debounce ensures all nodes added in rapid succession are
+                        // covered by the single scanForBots(document.body) call.
                         scheduleScan();
                         break;
                     }

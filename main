@@ -100,7 +100,8 @@
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     /******************************************************************
@@ -248,8 +249,8 @@
 
         document.getElementById("saveSettingsBtn").addEventListener("click", (e) => {
             e.stopPropagation();
-            AI_THRESHOLD = Math.max(0.1, parseFloat(document.getElementById("aiThresholdInput").value) || GM_getValue("ai_threshold", 4.0));
-            BOT_THRESHOLD = Math.max(0.1, parseFloat(document.getElementById("botThresholdInput").value) || GM_getValue("bot_threshold", 2.9));
+            AI_THRESHOLD = Math.max(0.1, parseFloat(document.getElementById("aiThresholdInput").value) || AI_THRESHOLD);
+            BOT_THRESHOLD = Math.max(0.1, parseFloat(document.getElementById("botThresholdInput").value) || BOT_THRESHOLD);
             GM_setValue("ai_threshold", AI_THRESHOLD);
             GM_setValue("bot_threshold", BOT_THRESHOLD);
             e.target.innerText = "Saved!";
@@ -385,6 +386,9 @@
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
                 if (node.nodeType === Node.ELEMENT_NODE) {
+                    // Trigger one debounced full-page scan rather than per-node scans.
+                    // The debounce ensures all nodes added in rapid succession are
+                    // covered by the single scanForBots(document.body) call.
                     scheduleScan();
                     break;
                 }
