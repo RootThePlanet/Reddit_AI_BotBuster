@@ -37,7 +37,7 @@
     /************************************
      * 2. CONFIGURATION & STATE
      ************************************/
-    const DEFAULT_AI_THRESHOLD  = 4.0;
+    const DEFAULT_AI_THRESHOLD  = 3.5;
     const DEFAULT_BOT_THRESHOLD = 2.9;
     const CONFIDENCE_MID_TIER   = 2.5;
     const CONFIDENCE_HIGH_TIER  = 5.0;
@@ -132,30 +132,80 @@
 
         if (wordCount < MIN_WORD_COUNT_FOR_AI_DETECTION) return { score: 0, reasons: [] };
 
+        // Immediate return: self-disclosed as AI
         if (/\bas an (ai|artificial intelligence)( language model)?\b/.test(lowerText)) {
             return { score: 10.0, reasons: ["Self-disclosed as an AI [+10.0]"] };
         }
 
+        // CHECK 1: Formulaic / transitional AI phrases
         const aiFormulaicPhrases = [
             "in conclusion", "furthermore", "moreover", "on the other hand",
             "it is important to note", "ultimately", "in summary",
-            "delve deeper into", "explore the nuances of"
+            "delve deeper into", "explore the nuances of",
+            "it's worth noting", "it is worth noting",
+            "it should be noted", "it's important to note",
+            "that being said", "having said that", "with that said",
+            "needless to say", "at the end of the day",
+            "all in all", "to put it simply", "first and foremost",
+            "last but not least", "to summarize", "in other words",
+            "it goes without saying", "as previously mentioned",
+            "in today's world", "in today's society",
+            "at its core", "when all is said and done",
+            "to a certain extent", "in light of", "with this in mind",
+            "it's clear that", "it is clear that",
+            "what's more", "to this end"
         ];
         let formulaicPhraseCount = 0;
         aiFormulaicPhrases.forEach(phrase => { if (lowerText.includes(phrase)) formulaicPhraseCount++; });
         if (formulaicPhraseCount > 0) {
-            const points = formulaicPhraseCount * 1.2;
+            const points = Math.min(formulaicPhraseCount * 1.2, 6.0);
             score += points;
             reasons.push(`Formulaic Language [+${points.toFixed(1)}]`);
         }
 
-        const contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|it's)\b/g);
-        if (wordCount > 150 && (!contractions || contractions.length < (wordCount / 100))) {
-            score += 1.8;
-            reasons.push("Lacks Contractions [+1.8]");
+        // CHECK 2: AI helper / closing phrases (very distinctive of AI)
+        const aiHelperClosings = [
+            "hope this helps", "hope that helps", "i'd be happy to",
+            "feel free to ask", "let me know if you have",
+            "please don't hesitate", "happy to help",
+            "i hope this clarifies", "hope this clarifies",
+            "feel free to reach out"
+        ];
+        if (aiHelperClosings.some(phrase => lowerText.includes(phrase))) {
+            score += 2.0;
+            reasons.push("AI Helper Closing [+2.0]");
         }
 
-        const complexSynonymStems = ['utiliz', 'leverag', 'commenc', 'facilitat', 'elucid', 'henceforth', 'nevertheless', 'demonstrat'];
+        // CHECK 3: AI enthusiasm / affirmation openers
+        const trimmedLower = lowerText.trimStart();
+        const aiEnthusiasmOpeners = [
+            "absolutely!", "absolutely,", "absolutely. ",
+            "certainly!", "certainly,", "certainly. ",
+            "great question", "excellent question",
+            "of course!", "of course,", "of course. ",
+            "indeed!", "indeed,", "great point"
+        ];
+        if (aiEnthusiasmOpeners.some(opener => trimmedLower.startsWith(opener))) {
+            score += 1.5;
+            reasons.push("AI Enthusiasm Opener [+1.5]");
+        }
+
+        // CHECK 4: Lacks contractions (AI rarely uses them; threshold lowered to 60 words)
+        const contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|it's|i've|i'd|you'd|couldn't|shouldn't|wouldn't|haven't|hasn't)\b/g);
+        if (wordCount > 60 && (!contractions || contractions.length < (wordCount / 80))) {
+            score += 2.2;
+            reasons.push("Lacks Contractions [+2.2]");
+        }
+
+        // CHECK 5: Unnatural / corporate synonym vocabulary
+        const complexSynonymStems = [
+            'utiliz', 'leverag', 'commenc', 'facilitat', 'elucid',
+            'henceforth', 'nevertheless', 'demonstrat',
+            'comprehens', 'multifacet', 'holistic', 'proactiv',
+            'streamlin', 'synerg', 'robust', 'paradigm',
+            'encompass', 'foster', 'catalyst', 'imperativ',
+            'nuanc', 'priorit', 'cultivat'
+        ];
         let complexWordCount = 0;
         words.forEach(word => { if (complexSynonymStems.some(stem => word.startsWith(stem))) complexWordCount++; });
         if (wordCount > 50 && complexWordCount > (wordCount / 75)) {
@@ -164,18 +214,20 @@
             reasons.push(`Unnatural Synonyms [+${points.toFixed(1)}]`);
         }
 
-        const personalPhrases = ["i think", "i feel", "i believe", "in my opinion", "in my experience"];
+        // CHECK 6: Lacks personal opinion markers (when text is also formal)
+        const personalPhrases = ["i think", "i feel", "i believe", "in my opinion", "in my experience", "personally,", "i reckon", "i suspect"];
         if (wordCount > 60 && formulaicPhraseCount > 0 && !personalPhrases.some(p => lowerText.includes(p))) {
             score += 1.0;
             reasons.push("Lacks Personal Opinion [+1.0]");
         }
 
+        // CHECK 7: Sentence length variance (AI writes with very uniform sentence lengths)
         const sentencesArr = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
         if (sentencesArr.length > 3) {
             const lengths = sentencesArr.map(s => s.split(/\s+/).length);
             const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
             const variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (wordCount > 50 && variance < 12) {
+            if (wordCount > 50 && variance < 15) {
                 score += 1.5;
                 reasons.push("Low Sentence Variance [+1.5]");
             }
@@ -185,20 +237,62 @@
             }
         }
 
+        // CHECK 8: Well-structured multi-paragraph response
         if (paragraphCount > 3 && wordCount > 80) {
             score += 0.5;
             reasons.push(`Well-structured (${paragraphCount} Paras) [+0.5]`);
         }
 
+        // CHECK 9: Emoji presence (human indicator)
         if (/\p{Emoji_Presentation}/gu.test(text)) {
             score -= 1.0;
             reasons.push("Contains Emojis [-1.0]");
         }
 
+        // CHECK 10: Flesch readability (AI tends to write clean, readable text)
         const readability = computeReadabilityScore(text);
-        if (readability !== null && readability > 80) {
+        if (readability !== null && readability > 70) {
             score += 0.55;
             reasons.push("High Readability Score [+0.55]");
+        }
+
+        // CHECK 11: Importance / urgency framing (AI over-uses these constructs)
+        const urgencyFrames = [
+            "it's crucial to", "it is crucial to",
+            "it's essential to", "it is essential to",
+            "it's vital to", "it is vital to",
+            "it's imperative to", "it is imperative to",
+            "it's key to note", "it is key to note"
+        ];
+        const urgencyCount = urgencyFrames.filter(phrase => lowerText.includes(phrase)).length;
+        if (urgencyCount > 0) {
+            const points = urgencyCount * 0.9;
+            score += points;
+            reasons.push(`Importance Framing [+${points.toFixed(1)}]`);
+        }
+
+        // CHECK 12: Passive voice / impersonal hedging
+        const passiveHedges = [
+            "it can be said", "it has been shown", "it is widely",
+            "it is generally", "it is commonly", "research suggests",
+            "studies show", "studies suggest", "according to research",
+            "it is well-known", "it has been established"
+        ];
+        const passiveCount = passiveHedges.filter(phrase => lowerText.includes(phrase)).length;
+        if (passiveCount > 0) {
+            const points = passiveCount * 0.8;
+            score += points;
+            reasons.push(`Impersonal Hedging [+${points.toFixed(1)}]`);
+        }
+
+        // CHECK 13: Structured list patterns (AI frequently uses numbered/bulleted lists)
+        const numberedListMatches = text.match(/^\s*\d+[.)]\s+\S/mg);
+        const bulletListMatches = text.match(/^\s*[-•*]\s+\S/mg);
+        const listItemCount = (numberedListMatches ? numberedListMatches.length : 0) +
+                              (bulletListMatches ? bulletListMatches.length : 0);
+        if (listItemCount >= 3) {
+            score += 1.5;
+            reasons.push("Structured List Pattern [+1.5]");
         }
 
         return { score: Math.max(0, score), reasons };
