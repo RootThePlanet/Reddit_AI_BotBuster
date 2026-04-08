@@ -192,7 +192,7 @@ describe('computeAIScore — AI enthusiasm opener (check 3)', () => {
 // ---------------------------------------------------------------------------
 describe('computeAIScore — lacks contractions (check 4)', () => {
     test('penalises long formal text with no contractions', () => {
-        // >60 words, no contractions, no formulaic phrases (to isolate this check)
+        // >80 words, no contractions, no formulaic phrases (to isolate this check)
         const formalText = Array(10).fill(
             'The system is designed to be efficient and reliable under all conditions.'
         ).join(' ');
@@ -209,8 +209,8 @@ describe('computeAIScore — lacks contractions (check 4)', () => {
         expect(result.reasons.some(r => r.includes('Contractions'))).toBe(false);
     });
 
-    test('does NOT penalise short text (< 60 words)', () => {
-        // 30 words, no contractions — but too short for this check
+    test('does NOT penalise short text (< 80 words)', () => {
+        // ~36 words, no contractions — but too short for this check
         const text = Array(6).fill('The result is clear and unambiguous.').join(' ');
         const result = computeAIScore(text);
         expect(result.reasons.some(r => r.includes('Contractions'))).toBe(false);
@@ -372,13 +372,8 @@ describe('computeAIScore — human vs. AI end-to-end', () => {
     });
 
     test('plain human text stays below the default AI threshold', () => {
-        // The HUMAN_TEXT contains "Feel free to ask" which triggers helper-closing (+2.0)
-        // and "happy to help" as part of it. Score can still be under threshold.
         const result = computeAIScore(HUMAN_TEXT);
-        // Verify it's lower than the AI text, not necessarily under threshold
-        // (human text can trigger some checks)
-        const aiResult = computeAIScore(AI_TEXT_FORMULAIC);
-        expect(result.score).toBeLessThan(aiResult.score);
+        expect(result.score).toBeLessThan(DEFAULT_AI_THRESHOLD);
     });
 });
 
