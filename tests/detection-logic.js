@@ -14,10 +14,10 @@
 // ---------------------------------------------------------------------------
 // Constants (mirrors firefox-extension/content.js §2)
 // ---------------------------------------------------------------------------
-const DEFAULT_AI_THRESHOLD  = 2.0;
+const DEFAULT_AI_THRESHOLD  = 3.5;
 const DEFAULT_BOT_THRESHOLD = 2.9;
-const CONFIDENCE_MID_TIER   = 1.5;
-const CONFIDENCE_HIGH_TIER  = 3.0;
+const CONFIDENCE_MID_TIER   = 2.5;
+const CONFIDENCE_HIGH_TIER  = 5.0;
 const MIN_WORD_COUNT_FOR_AI_DETECTION = 25;
 
 const suspiciousUserPatterns = [
@@ -164,9 +164,9 @@ function computeAIScore(text, paragraphCount) {
 
     // CHECK 4: Lacks contractions
     const contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|it's|i've|i'd|you'd|couldn't|shouldn't|wouldn't|haven't|hasn't)\b/g);
-    if (wordCount > 60 && (!contractions || contractions.length < (wordCount / 80))) {
-        score += 2.2;
-        reasons.push("Lacks Contractions [+2.2]");
+    if (wordCount > 80 && (!contractions || contractions.length < (wordCount / 80))) {
+        score += 1.8;
+        reasons.push("Lacks Contractions [+1.8]");
     }
 
     // CHECK 5: Unnatural / corporate synonym vocabulary
