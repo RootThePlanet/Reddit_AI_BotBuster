@@ -1,10 +1,6 @@
-# Reddit AI BotBuster
+# Redd-Eye
 
-## Reddit AI BotBuster is an advanced Firefox extension that detects potential AI-generated content and bot accounts on Reddit, providing a transparent, configurable, and powerful set of tools to help you identify inauthentic content as you browse.
-
-> ⚠️ **Tampermonkey Script Deprecated**
->
-> The Tampermonkey userscript (`main/`) has been deprecated. The fully functional **Firefox extension** (`firefox-extension/`) is now the recommended way to use Reddit AI BotBuster. The userscript is kept for reference only and will no longer receive updates.
+## Redd-Eye is an advanced browser extension (Firefox & Chrome) that detects potential AI-generated content and bot accounts on Reddit, providing a transparent, configurable, and powerful set of tools to help you identify inauthentic content as you browse.
 
     🚨 Compatibility Notice
 
@@ -27,9 +23,11 @@ The extension analyzes content using a multi-layered heuristic engine inspired b
     -Paraphrase Shield: To combat users who use tools to rephrase AI content, the extension includes a heuristic that detects the "anomalous use of synonyms". It flags text that uses an unnaturally high number of complex words where simpler ones would suffice—a key trait of paraphrased content.
     -Bot & Spam Heuristics: The extension also runs checks for classic bot indicators, including suspicious username patterns (e.g., Word-Word1234) and links to known spam domains.
 
-## Installation (Firefox Extension)
+## Installation
 
-### Option A — Install as a Temporary Extension (for testing / no account required)
+### Firefox
+
+#### Option A — Install as a Temporary Extension (for testing / no account required)
 
 1. Download or clone this repository and locate the `firefox-extension/` folder.
 2. Open Firefox and navigate to `about:debugging`.
@@ -38,11 +36,11 @@ The extension analyzes content using a multi-layered heuristic engine inspired b
 5. Browse to the `firefox-extension/` folder and select the `manifest.json` file.
 6. The extension is now active. It will remain loaded until you restart Firefox.
 
-### Option B — Install as a Permanent Extension via Firefox Add-ons (AMO)
+#### Option B — Install as a Permanent Extension via Firefox Add-ons (AMO)
 
 If the extension is published on [addons.mozilla.org](https://addons.mozilla.org), you can install it directly from there like any other Firefox add-on. Once installed it will persist across browser restarts and update automatically.
 
-### Option C — Pack and Install as a Signed Extension (self-distribution)
+#### Option C — Pack and Install as a Signed Extension (self-distribution)
 
 1. Ensure you have [Node.js](https://nodejs.org) and [`web-ext`](https://github.com/mozilla/web-ext) installed:
    ```
@@ -55,6 +53,21 @@ If the extension is published on [addons.mozilla.org](https://addons.mozilla.org
    This creates a `.zip` file in `firefox-extension/web-ext-artifacts/`.
 3. In Firefox, go to `about:addons` → click the gear icon → **"Install Add-on From File…"** and select the generated `.zip`.
    > **Note:** Firefox requires extensions to be signed by Mozilla for permanent installation outside of Developer Edition / Nightly. Use [about:debugging](#option-a) for unsigned local testing.
+
+### Chrome
+
+#### Option A — Install as an Unpacked Extension (for testing / no account required)
+
+1. Download or clone this repository and locate the `chrome-extension/` folder.
+2. Open Chrome and navigate to `chrome://extensions`.
+3. Enable **"Developer mode"** using the toggle in the top-right corner.
+4. Click **"Load unpacked"**.
+5. Browse to and select the `chrome-extension/` folder.
+6. The extension is now active.
+
+#### Option B — Install from the Chrome Web Store
+
+If the extension is published on the [Chrome Web Store](https://chrome.google.com/webstore), you can install it directly from there like any other Chrome extension. Once installed it will persist across browser restarts and update automatically.
 
 ## Usage Guide
 
@@ -78,7 +91,7 @@ If the extension is published on [addons.mozilla.org](https://addons.mozilla.org
 
 The detection thresholds for both AI and Bot scoring are configurable via the UI. The default values are:
 
-    AI Threshold: 4.0
+    AI Threshold: 3.5
     Bot Threshold: 2.9
 
 Your custom settings are saved in your browser's local storage and will persist across sessions.

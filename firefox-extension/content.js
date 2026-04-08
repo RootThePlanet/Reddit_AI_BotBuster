@@ -1,5 +1,5 @@
 /*
- Reddit AI BotBuster – Firefox WebExtension content script.
+ Redd-Eye – Firefox WebExtension content script.
  Version 4.2.0
  */
 
@@ -474,7 +474,7 @@
 
             botCount++;
             detectionIndex++;
-            const generatedID = "botbuster-detected-" + detectionIndex;
+            const generatedID = "reddeye-detected-" + detectionIndex;
             if (!elem.id) elem.setAttribute("id", generatedID);
             const elemID   = elem.id;
             const username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || "Unknown";

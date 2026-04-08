@@ -1,7 +1,7 @@
 {
-  "name": "reddit-ai-botbuster",
+  "name": "redd-eye",
   "version": "4.2.0",
-  "description": "Automated test suite for Reddit AI BotBuster detection logic",
+  "description": "Automated test suite for Redd-Eye detection logic",
   "scripts": {
     "test": "jest --coverage"
   },
