@@ -1,0 +1,21 @@
+{
+  "name": "reddit-ai-botbuster",
+  "version": "4.2.0",
+  "description": "Automated test suite for Reddit AI BotBuster detection logic",
+  "scripts": {
+    "test": "jest --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "coverageDirectory": "coverage",
+    "collectCoverageFrom": [
+      "tests/detection-logic.js"
+    ]
+  }
+}
