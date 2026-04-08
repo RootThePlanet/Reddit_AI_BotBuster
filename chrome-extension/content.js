@@ -1,466 +1,423 @@
 /*
- Reddit AI BotBuster WebExtension content script.
+ Reddit AI BotBuster WebExtension content script (Chrome).
+ Version 4.2.0
  */
 
 (function() {
     'use strict';
 
-    /***********************
-     * 1. Inject CSS for Bot Username Styling
-     ***********************/
-    const style = document.createElement("style");
-    style.innerHTML = `
-        .botUsername {
-            color: orange !important;
-            font-size: 14px !important;
-        }
-        html {
-            scroll-behavior: smooth;
-        }
+    /************************************
+     * 1. STYLES & UI INJECTION
+     *************************************/
+    const style = document.createElement('style');
+    style.textContent = `
+        .botUsername { color: orange !important; font-size: 14px !important; font-weight: bold !important; }
+        .botAndAiContentDetected { outline: 3px dashed purple !important; outline-offset: -3px; }
+        .aiContentLow  { outline: 2px dashed #007bff !important; outline-offset: -2px; }
+        .aiContentMid  { outline: 3px dashed #0056b3 !important; outline-offset: -3px; }
+        .aiContentHigh { outline: 3px solid  #00234d !important; outline-offset: -3px; }
+
+        #botCounterPopup { position: fixed; top: 40px; right: 10px; width: 280px; z-index: 9999; background-color: rgba(248,248,248,0.9); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-family: 'Verdana', sans-serif; font-size: 12px; border: 1px solid #ccc; user-select: none; }
+        #botPopupHeader { display: flex; justify-content: space-between; align-items: center; font-weight: bold; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+        #settingsIcon { cursor: pointer; font-size: 16px; margin-left: 10px; }
+        #settingsPanel { display: none; padding: 10px; border-top: 1px solid #eee; }
+        #settingsPanel label { display: block; margin: 5px 0; }
+        #settingsPanel input { width: 50px; margin-left: 10px; }
+        #saveSettingsBtn { background-color: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; margin-top: 10px; }
+        #saveSettingsBtn:hover { background-color: #0056b3; }
+        #botDropdown { display: none; max-height: 300px; overflow-y: auto; padding: 5px 0; }
+        #botDropdown a { display: block; padding: 3px 10px; text-decoration: none; color: #333; }
+        #botDropdown a:hover { background-color: rgba(0,0,0,0.08); }
+        #aiScoreTooltip { position: fixed; display: none; background: #222; color: #fff; border-radius: 5px; padding: 8px; font-size: 12px; z-index: 10000; max-width: 300px; pointer-events: none; }
+        #aiScoreTooltip ul { margin: 0; padding: 0 0 0 15px; }
+        #aiScoreTooltip li { margin-bottom: 3px; }
     `;
     document.head.appendChild(style);
 
-    /***********************
-     * CONFIGURATION
-     ***********************/
-    // Thresholds for flagging:
-    const BOT_THRESHOLD = 2;    // For bot username detection.
-    const AI_THRESHOLD  = 3;    // For AI-generated content detection.
+    /************************************
+     * 2. CONFIGURATION & STATE
+     ************************************/
+    const DEFAULT_AI_THRESHOLD  = 4.0;
+    const DEFAULT_BOT_THRESHOLD = 2.9;
+    const CONFIDENCE_MID_TIER   = 2.5;
+    const CONFIDENCE_HIGH_TIER  = 5.0;
+    const MIN_WORD_COUNT_FOR_AI_DETECTION = 25;
 
-    // --- Bot-related heuristics patterns ---
+    let AI_THRESHOLD  = DEFAULT_AI_THRESHOLD;
+    let BOT_THRESHOLD = DEFAULT_BOT_THRESHOLD;
+
     const suspiciousUserPatterns = [
         /bot/i,
         /^[A-Za-z]+-[A-Za-z]+\d{4}$/,
-        /^[A-Za-z]+[A-Za-z]+\d+$/,
-        /^[A-Z][a-z]+[A-Z][a-z]+s{2,}$/
+        /^[A-Za-z]+[_-][A-Za-z]+\d{2,4}$/,
+        /^[A-Za-z]+\d{4,}$/,
+        /^(user|redditor)\d{6,}$/i
     ];
-
-    // New, conservative username scoring.
-    function computeUsernameBotScore(username) {
-        let score = 0;
-        if (username.toLowerCase().includes("bot")) { score += 0.5; }
-        suspiciousUserPatterns.forEach(pattern => {
-            if (pattern.test(username)) { score += 0.5; }
-        });
-        let vowels = username.match(/[aeiou]/gi);
-        let vowelRatio = vowels ? vowels.length / username.length : 0;
-        if (vowelRatio < 0.3) { score += 0.5; }
-        let digits = username.match(/\d/g);
-        if (digits && (digits.length / username.length) > 0.5) { score += 0.5; }
-        if (username.length < 4 || username.length > 20) { score += 0.5; }
-        return score;
-    }
-
-    function isRandomString(username) {
-        if (username.length < 8) return false;
-        const vowels = username.match(/[aeiou]/gi);
-        const ratio = vowels ? vowels.length / username.length : 0;
-        return ratio < 0.3;
-    }
-
     const genericResponses = [
-        "i agree dude",
-        "yes you are right",
-        "well said",
-        "totally agree",
-        "i agree",
-        "right you are",
-        "well spoken, you are",
-        "perfectly said this is"
+        "i agree dude", "yes you are right", "well said", "totally agree",
+        "i agree", "right you are", "well spoken, you are", "perfectly said this is"
     ];
+    const scamLinkRegex = /\.(live|life|shop|xyz|buzz|top|click|fun|site|online|store|blog|app|digital|network|cloud)\b/i;
+    const CONTENT_SELECTORS = [
+        'div[data-testid="post-container"]',
+        'div[data-testid="comment"]',
+        'div.comment',
+        'div.link'
+    ];
+    const USERNAME_SELECTORS = 'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]';
 
-    const scamLinkRegex = /\.(live|life|shop)\b/i;
-
-    function isNewAccount(userElem) {
-        const titleAttr = userElem.getAttribute('title') || "";
-        return /redditor for.*\b(day|week|month)\b/i.test(titleAttr);
-    }
-
-    // Parse account age in months from user tooltip.
-    function getAccountAge(userElem) {
-        const titleAttr = userElem.getAttribute('title') || "";
-        const match = titleAttr.match(/redditor for (\d+)\s*(day|week|month|year)s?/i);
-        if (match) {
-            let value = parseInt(match[1]);
-            let unit = match[2].toLowerCase();
-            if (unit === "day") return value / 30;
-            if (unit === "week") return (value * 7) / 30;
-            if (unit === "month") return value;
-            if (unit === "year") return value * 12;
-        }
-        return null;
-    }
-
-    // Global map to track duplicate comment texts.
-    const commentTextMap = new Map();
-
-    /***********************
-     * READABILITY HEURISTIC
-     ***********************/
-    function countSyllables(word) {
-        word = word.toLowerCase();
-        if (word.length <= 3) { return 1; }
-        word = word.replace(/e\b/g, "");
-        let matches = word.match(/[aeiouy]{1,}/g);
-        return matches ? matches.length : 1;
-    }
-
-    function computeReadabilityScore(text) {
-        let sentenceMatches = text.match(/[^.!?]+[.!?]+/g);
-        if (!sentenceMatches) return null;
-        let sentences = sentenceMatches;
-        let words = text.split(/\s+/).filter(w => w.length > 0);
-        let sentenceCount = sentences.length;
-        let wordCount = words.length;
-        let syllableCount = 0;
-        words.forEach(word => { syllableCount += countSyllables(word); });
-        let flesch = 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllableCount / wordCount);
-        return flesch;
-    }
-
-    /***********************
-     * ADVANCED AI DETECTION HEURISTICS
-     ***********************/
-    function computeAIScore(text) {
-        let score = 0;
-        let lowerText = text.toLowerCase();
-
-        if (lowerText.includes("as an ai language model") || lowerText.includes("i am not a human")) {
-            score += 1.8;
-        }
-
-        let contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|aren't)\b/g);
-        let words = lowerText.split(/\s+/);
-        let wordCount = words.length;
-        if (wordCount > 150 && (!contractions || contractions.length === 0)) {
-            score += 1.2;
-        }
-
-        const aiPhrases = ["in conclusion", "furthermore", "moreover", "on the other hand"];
-        aiPhrases.forEach(phrase => { if (lowerText.includes(phrase)) { score += 0.5; } });
-
-        const aiIndicators = [
-            "i do not have personal experiences",
-            "my training data",
-            "i cannot",
-            "i do not have the ability",
-            "apologies if",
-            "i apologize",
-            "i'm unable",
-            "as an ai",
-            "as an artificial intelligence"
-        ];
-        aiIndicators.forEach(phrase => { if (lowerText.includes(phrase)) { score += 1.0; } });
-
-        let sentencesArr = lowerText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-        if (sentencesArr.length > 1) {
-            let lengths = sentencesArr.map(s => s.split(/\s+/).length);
-            let avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
-            let variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
-            if (variance < 4) { score += 0.8; }
-        }
-
-        let uniqueWords = new Set(words);
-        let typeTokenRatio = uniqueWords.size / words.length;
-        if (words.length > 20 && typeTokenRatio < 0.3) { score += 1.0; }
-
-        function getBigrams(arr) {
-            let bigrams = [];
-            for (let i = 0; i < arr.length - 1; i++) {
-                bigrams.push(arr[i] + " " + arr[i+1]);
-            }
-            return bigrams;
-        }
-        let bigrams = getBigrams(words);
-        if (bigrams.length > 0) {
-            let uniqueBigrams = new Set(bigrams);
-            let bigramRatio = uniqueBigrams.size / bigrams.length;
-            if (bigramRatio < 0.5) { score += 0.8; }
-        }
-
-        function getTrigrams(arr) {
-            let trigrams = [];
-            for (let i = 0; i < arr.length - 2; i++) {
-                trigrams.push(arr[i] + " " + arr[i+1] + " " + arr[i+2]);
-            }
-            return trigrams;
-        }
-        let trigrams = getTrigrams(words);
-        if (trigrams.length > 0) {
-            let uniqueTrigrams = new Set(trigrams);
-            let trigramRatio = uniqueTrigrams.size / trigrams.length;
-            if (trigramRatio < 0.6) { score += 0.8; }
-        }
-
-        score += computeSemanticCoherenceScore(text); // now returns 0.6
-        score += computeProperNounConsistencyScore(text); // now returns 0.3
-        score += computeContextShiftScore(text); // now returns 0.6
-        score += computeSyntaxScore(text); // now returns 0.9
-
-        let readability = computeReadabilityScore(text);
-        if (readability !== null && readability > 80) { score += 0.55; }
-
-        return score;
-    }
-
-    function computeSemanticCoherenceScore(text) {
-        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-        if (sentences.length < 2) return 0;
-        let similarities = [];
-        for (let i = 0; i < sentences.length - 1; i++) {
-            let s1 = new Set(sentences[i].toLowerCase().split(/\s+/));
-            let s2 = new Set(sentences[i+1].toLowerCase().split(/\s+/));
-            let intersection = new Set([...s1].filter(x => s2.has(x)));
-            let union = new Set([...s1, ...s2]);
-            let jaccard = union.size ? intersection.size / union.size : 0;
-            similarities.push(jaccard);
-        }
-        let avgSim = similarities.reduce((a, b) => a + b, 0) / similarities.length;
-        return avgSim < 0.2 ? 0.6 : 0;
-    }
-
-    function computeProperNounConsistencyScore(text) {
-        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-        if (sentences.length < 2) return 0;
-        let counts = sentences.map(sentence => {
-            let words = sentence.split(/\s+/);
-            let properNouns = words.slice(1).filter(word => /^[A-Z][a-z]+/.test(word));
-            return properNouns.length;
-        });
-        let avg = counts.reduce((a, b) => a + b, 0) / counts.length;
-        let variance = counts.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / counts.length;
-        return variance > 2 ? 0.3 : 0;
-    }
-
-    function computeContextShiftScore(text) {
-        let words = text.split(/\s+/).filter(w => w.length > 0);
-        if (words.length < 10) return 0;
-        let half = Math.floor(words.length / 2);
-        let firstHalf = words.slice(0, half);
-        let secondHalf = words.slice(half);
-        let freq = arr => {
-            let f = {};
-            arr.forEach(word => { f[word] = (f[word] || 0) + 1; });
-            return f;
-        };
-        let f1 = freq(firstHalf), f2 = freq(secondHalf);
-        let allWords = new Set([...Object.keys(f1), ...Object.keys(f2)]);
-        let dot = 0, norm1 = 0, norm2 = 0;
-        allWords.forEach(word => {
-            let v1 = f1[word] || 0;
-            let v2 = f2[word] || 0;
-            dot += v1 * v2;
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
-        });
-        let cosSim = (norm1 && norm2) ? dot / (Math.sqrt(norm1) * Math.sqrt(norm2)) : 0;
-        return cosSim < 0.3 ? 0.6 : 0;
-    }
-
-    function computeSyntaxScore(text) {
-        let sentences = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
-        if (sentences.length === 0) return 0;
-        let punctuationMatches = text.match(/[,\;:\-]/g);
-        let punctuationCount = punctuationMatches ? punctuationMatches.length : 0;
-        let avgPunctuation = punctuationCount / sentences.length;
-        return avgPunctuation < 1 ? 0.9 : 0;
-    }
-
-    /***********************
-     * BOT SCORE CALCULATION
-     ***********************/
-    function computeBotScore(elem) {
-        let score = 0;
-        const userElem = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
-        if (userElem) {
-            const username = userElem.innerText.trim();
-            let ageInMonths = getAccountAge(userElem);
-            // Only add username-based bot signals if account age is 60 months or less.
-            if (ageInMonths === null || ageInMonths <= 60) {
-                if (username) { score += computeUsernameBotScore(username); }
-                if (isNewAccount(userElem)) { score += 2; }
-                if (ageInMonths !== null && ageInMonths < 2) { score += 1; }
-            }
-        }
-        let textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
-        genericResponses.forEach(phrase => { if (textContent === phrase) { score++; } });
-        if (textContent.split(' ').length < 3) { score++; }
-        if (textContent.includes("&amp;") && !textContent.includes("& ")) { score++; }
-        if (textContent.startsWith('>') && textContent.split(' ').length < 5) { score++; }
-        if (textContent.length > 0) {
-            const count = commentTextMap.get(textContent) || 0;
-            if (count > 0) { score++; }
-        }
-        const links = elem.querySelectorAll('a');
-        links.forEach(link => {
-            if (scamLinkRegex.test(link.href)) { score++; }
-            if (link.parentElement && link.parentElement.innerText.includes("Powered by Gearlaunch")) { score++; }
-        });
-        return score;
-    }
-
-    function countRedFlags(elem) {
-        const botScore = computeBotScore(elem);
-        const aiScore = computeAIScore(elem.innerText);
-        return { botScore, aiScore, totalScore: botScore + aiScore };
-    }
-
-    /***********************
-     * DETECTIONS & POPUP
-     ***********************/
     let botCount = 0;
     let detectedBots = [];
     let detectionIndex = 0;
 
-    function createPopup() {
-        let popup = document.getElementById("botCounterPopup");
-        if (!popup) {
-            popup = document.createElement("div");
-            popup.id = "botCounterPopup";
-            popup.style.position = "fixed";
-            popup.style.top = "40px";
-            popup.style.right = "10px";
-            popup.style.backgroundColor = "rgba(248,248,248,0.5)";
-            popup.style.border = "1px solid #ccc";
-            popup.style.padding = "10px";
-            popup.style.zIndex = "9999";
-            popup.style.fontFamily = "Roboto, sans-serif";
-            popup.style.fontSize = "12px";
-            popup.style.cursor = "pointer";
-            popup.style.backdropFilter = "blur(5px)";
-            popup.style.webkitBackdropFilter = "blur(5px)";
-            popup.style.width = "250px";
-            let header = document.createElement("div");
-            header.id = "botPopupHeader";
-            header.innerText = "Detected bot/AI content: " + botCount;
-            if (botCount < 10) { header.style.color = "green"; }
-            else if (botCount < 30) { header.style.color = "yellow"; }
-            else { header.style.color = "red"; }
-            popup.appendChild(header);
-            let dropdown = document.createElement("div");
-            dropdown.id = "botDropdown";
-            dropdown.style.display = "none";
-            dropdown.style.maxHeight = "300px";
-            dropdown.style.overflowY = "auto";
-            dropdown.style.marginTop = "10px";
-            dropdown.style.borderTop = "1px solid #ccc";
-            dropdown.style.paddingTop = "5px";
-            popup.appendChild(dropdown);
-            popup.addEventListener("click", function(e) {
-                e.stopPropagation();
-                dropdown.style.display = (dropdown.style.display === "none") ? "block" : "none";
-            });
-            document.body.appendChild(popup);
+    /************************************
+     * 3. PERSISTENT SETTINGS via chrome.storage.sync
+     ************************************/
+    function loadSettings(callback) {
+        chrome.storage.sync.get({ ai_threshold: DEFAULT_AI_THRESHOLD, bot_threshold: DEFAULT_BOT_THRESHOLD })
+            .then(result => {
+                AI_THRESHOLD  = result.ai_threshold;
+                BOT_THRESHOLD = result.bot_threshold;
+                callback();
+            })
+            .catch(() => { callback(); });
+    }
+
+    function saveSettings(aiVal, botVal) {
+        AI_THRESHOLD  = aiVal;
+        BOT_THRESHOLD = botVal;
+        chrome.storage.sync.set({ ai_threshold: aiVal, bot_threshold: botVal });
+    }
+
+    /************************************
+     * 4. UTILITY FUNCTIONS
+     ************************************/
+    function escapeHTML(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function countSyllables(word) {
+        word = word.toLowerCase();
+        if (word.length <= 3) return 1;
+        word = word.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '');
+        word = word.replace(/^y/, '');
+        const matches = word.match(/[aeiouy]{1,}/g);
+        return matches ? matches.length : 1;
+    }
+
+    function computeReadabilityScore(text) {
+        const sentenceMatches = text.match(/[^.!?]+[.!?]+/g);
+        if (!sentenceMatches) return null;
+        const words = text.split(/\s+/).filter(w => w.length > 0);
+        if (words.length === 0 || sentenceMatches.length === 0) return null;
+        const syllableCount = words.reduce((acc, word) => acc + countSyllables(word), 0);
+        return 206.835 - 1.015 * (words.length / sentenceMatches.length) - 84.6 * (syllableCount / words.length);
+    }
+
+    /************************************
+     * 5. AI & BOT DETECTION ENGINES
+     ************************************/
+    function computeAIScore(text, paragraphCount) {
+        paragraphCount = paragraphCount || 1;
+        let score = 0;
+        const reasons = [];
+        const lowerText = text.toLowerCase();
+        const words = lowerText.split(/\s+/).filter(w => w.length > 0);
+        const wordCount = words.length;
+
+        if (wordCount < MIN_WORD_COUNT_FOR_AI_DETECTION) return { score: 0, reasons: [] };
+
+        if (/\bas an (ai|artificial intelligence)( language model)?\b/.test(lowerText)) {
+            return { score: 10.0, reasons: ["Self-disclosed as an AI [+10.0]"] };
         }
+
+        const aiFormulaicPhrases = [
+            "in conclusion", "furthermore", "moreover", "on the other hand",
+            "it is important to note", "ultimately", "in summary",
+            "delve deeper into", "explore the nuances of"
+        ];
+        let formulaicPhraseCount = 0;
+        aiFormulaicPhrases.forEach(phrase => { if (lowerText.includes(phrase)) formulaicPhraseCount++; });
+        if (formulaicPhraseCount > 0) {
+            const points = formulaicPhraseCount * 1.2;
+            score += points;
+            reasons.push(`Formulaic Language [+${points.toFixed(1)}]`);
+        }
+
+        const contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|it's)\b/g);
+        if (wordCount > 150 && (!contractions || contractions.length < (wordCount / 100))) {
+            score += 1.8;
+            reasons.push("Lacks Contractions [+1.8]");
+        }
+
+        const complexSynonymStems = ['utiliz', 'leverag', 'commenc', 'facilitat', 'elucid', 'henceforth', 'nevertheless', 'demonstrat'];
+        let complexWordCount = 0;
+        words.forEach(word => { if (complexSynonymStems.some(stem => word.startsWith(stem))) complexWordCount++; });
+        if (wordCount > 50 && complexWordCount > (wordCount / 75)) {
+            const points = complexWordCount * 0.8;
+            score += points;
+            reasons.push(`Unnatural Synonyms [+${points.toFixed(1)}]`);
+        }
+
+        const personalPhrases = ["i think", "i feel", "i believe", "in my opinion", "in my experience"];
+        if (wordCount > 60 && formulaicPhraseCount > 0 && !personalPhrases.some(p => lowerText.includes(p))) {
+            score += 1.0;
+            reasons.push("Lacks Personal Opinion [+1.0]");
+        }
+
+        const sentencesArr = text.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 0);
+        if (sentencesArr.length > 3) {
+            const lengths = sentencesArr.map(s => s.split(/\s+/).length);
+            const avg = lengths.reduce((a, b) => a + b, 0) / lengths.length;
+            const variance = lengths.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / lengths.length;
+            if (wordCount > 50 && variance < 12) {
+                score += 1.5;
+                reasons.push("Low Sentence Variance [+1.5]");
+            }
+            if (variance > 40) {
+                score -= 1.0;
+                reasons.push("High Burstiness (Human-like) [-1.0]");
+            }
+        }
+
+        if (paragraphCount > 3 && wordCount > 80) {
+            score += 0.5;
+            reasons.push(`Well-structured (${paragraphCount} Paras) [+0.5]`);
+        }
+
+        if (/\p{Emoji_Presentation}/gu.test(text)) {
+            score -= 1.0;
+            reasons.push("Contains Emojis [-1.0]");
+        }
+
+        const readability = computeReadabilityScore(text);
+        if (readability !== null && readability > 80) {
+            score += 0.55;
+            reasons.push("High Readability Score [+0.55]");
+        }
+
+        return { score: Math.max(0, score), reasons };
+    }
+
+    function computeUsernameBotScore(username) {
+        let score = 0;
+        suspiciousUserPatterns.forEach(pattern => { if (pattern.test(username)) score += 1.5; });
+        const digits = username.match(/\d/g);
+        if (digits && (digits.length / username.length) > 0.4) score += 0.8;
+        return score;
+    }
+
+    function computeBotScore(elem) {
+        let score = 0;
+        const userElem = elem.querySelector(USERNAME_SELECTORS);
+        if (userElem) {
+            score += computeUsernameBotScore(userElem.textContent.trim());
+        }
+        const textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
+        elem.querySelectorAll('a').forEach(link => {
+            if (scamLinkRegex.test(link.href)) score += 3.0;
+        });
+        return score;
+    }
+
+    /************************************
+     * 6. UI MANAGEMENT & POPUP
+     ************************************/
+    function createPopupAndTooltip() {
+        const popup = document.createElement("div");
+        popup.id = "botCounterPopup";
+        popup.innerHTML = `
+            <div id="botPopupHeader">
+                <span>Detected bot/AI: 0</span>
+                <span id="settingsIcon" title="Settings">⚙️</span>
+            </div>
+            <div id="settingsPanel">
+                <label>AI Threshold: <input type="number" id="aiThresholdInput" step="0.1" min="0.1"></label>
+                <label>Bot Threshold: <input type="number" id="botThresholdInput" step="0.1" min="0.1"></label>
+                <button id="saveSettingsBtn">Save</button>
+            </div>
+            <div id="botDropdown"></div>`;
+        document.body.appendChild(popup);
+        document.getElementById("aiThresholdInput").value  = AI_THRESHOLD;
+        document.getElementById("botThresholdInput").value = BOT_THRESHOLD;
+
+        const tooltip = document.createElement("div");
+        tooltip.id = "aiScoreTooltip";
+        document.body.appendChild(tooltip);
+
+        document.getElementById("botPopupHeader").addEventListener("click", e => {
+            if (e.target.id === "settingsIcon") {
+                e.stopPropagation();
+                const panel = document.getElementById("settingsPanel");
+                panel.style.display = panel.style.display === "block" ? "none" : "block";
+            } else {
+                const dropdown = document.getElementById("botDropdown");
+                dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+                if (dropdown.style.display === 'none') {
+                    document.getElementById('settingsPanel').style.display = 'none';
+                }
+            }
+        });
+
+        document.getElementById("saveSettingsBtn").addEventListener("click", e => {
+            e.stopPropagation();
+            const aiVal  = Math.max(0.1, parseFloat(document.getElementById("aiThresholdInput").value) || DEFAULT_AI_THRESHOLD);
+            const botVal = Math.max(0.1, parseFloat(document.getElementById("botThresholdInput").value) || DEFAULT_BOT_THRESHOLD);
+            saveSettings(aiVal, botVal);
+            e.target.innerText = "Saved!";
+            setTimeout(() => { e.target.innerText = "Save"; }, 1500);
+        });
+
+        document.body.addEventListener('mouseover', e => {
+            const flaggedElem = e.target.closest('[data-bot-detected="true"]');
+            if (flaggedElem) {
+                let aiReasons = [];
+                try { aiReasons = JSON.parse(flaggedElem.dataset.aiReasons || '[]'); } catch (_) { /* ignore corrupt data */ }
+                const reasonsHTML = aiReasons.map(r => `<li>${escapeHTML(String(r))}</li>`).join('');
+                const botScore = parseFloat(flaggedElem.dataset.botScore).toFixed(1);
+                const aiScore  = parseFloat(flaggedElem.dataset.aiScore).toFixed(1);
+                tooltip.innerHTML = `<strong>Bot Score:</strong> ${escapeHTML(botScore)} / ${escapeHTML(String(BOT_THRESHOLD))}<br><strong>AI Score:</strong> ${escapeHTML(aiScore)} / ${escapeHTML(String(AI_THRESHOLD))}<ul>${reasonsHTML}</ul>`;
+                tooltip.style.display = 'block';
+            }
+        });
+        document.body.addEventListener('mouseout',  () => { tooltip.style.display = 'none'; });
+        document.body.addEventListener('mousemove', e => {
+            if (tooltip.style.display === 'block') {
+                tooltip.style.left = `${e.pageX + 15}px`;
+                tooltip.style.top  = `${e.pageY + 15}px`;
+            }
+        });
     }
 
     function updatePopup() {
-        let header = document.getElementById("botPopupHeader");
-        let dropdown = document.getElementById("botDropdown");
-        if (header) {
-            header.innerText = "Detected bot/AI content: " + botCount;
-            if (botCount < 10) { header.style.color = "green"; }
-            else if (botCount < 30) { header.style.color = "yellow"; }
-            else { header.style.color = "red"; }
-        }
-        if (dropdown) {
-            dropdown.innerHTML = "";
-            if (detectedBots.length === 0) {
-                let emptyMsg = document.createElement("div");
-                emptyMsg.innerText = "No bots/AI detected.";
-                dropdown.appendChild(emptyMsg);
-            } else {
-                detectedBots.forEach(function(item) {
-                    let entry = document.createElement("div");
-                    entry.style.marginBottom = "5px";
-                    let link = document.createElement("a");
+        document.querySelector("#botPopupHeader > span").textContent = `Detected bot/AI: ${botCount}`;
+        const dropdown = document.getElementById("botDropdown");
+        dropdown.innerHTML = "";
+        if (detectedBots.length === 0) {
+            dropdown.innerHTML = `<span style="padding:3px 10px;color:#777;font-style:italic;">No bots/AI detected yet.</span>`;
+        } else {
+            detectedBots
+                .slice()
+                .sort((a, b) => b.aiScore - a.aiScore || b.botScore - a.botScore)
+                .forEach(item => {
+                    const link = document.createElement("a");
                     link.href = "#" + item.elemID;
-                    link.style.color = "inherit";
-                    link.style.textDecoration = "none";
-                    link.style.cursor = "pointer";
-                    link.innerText = item.username;
-                    entry.appendChild(link);
-                    dropdown.appendChild(entry);
+                    link.textContent = `${item.username} (${item.reason})`;
+                    link.title = `Bot Score: ${item.botScore.toFixed(1)}, AI Score: ${item.aiScore.toFixed(1)}`;
+                    link.addEventListener('click', e => {
+                        e.preventDefault();
+                        document.getElementById(item.elemID)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    });
+                    dropdown.appendChild(link);
                 });
-            }
         }
     }
 
-    createPopup();
-    updatePopup();
-
+    /************************************
+     * 7. CORE DETECTION LOGIC
+     ************************************/
     function highlightIfSuspected(elem) {
-        if (elem.getAttribute("data-bot-detected") === "true") return;
-        const flags = countRedFlags(elem);
-        const botFlag = flags.botScore >= BOT_THRESHOLD;
-        const aiFlag = flags.aiScore >= AI_THRESHOLD;
+        if (elem.getAttribute("data-bot-detected")) return;
+
+        const commentBody = elem.querySelector('div[data-testid="comment"] > div:nth-child(2) > div');
+        let textToAnalyze = '', paragraphCount = 0;
+
+        if (commentBody && commentBody.querySelectorAll('p').length > 0) {
+            const paragraphs = Array.from(commentBody.querySelectorAll('p'));
+            textToAnalyze = paragraphs.map(p => p.innerText).join('\n\n');
+            paragraphCount = paragraphs.length;
+        } else {
+            const contentDiv = elem.querySelector('.md, .usertext-body');
+            textToAnalyze = contentDiv ? contentDiv.innerText : (elem.innerText || '');
+            paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+        }
+
+        if (!textToAnalyze.trim()) return;
+
+        const aiResult = computeAIScore(textToAnalyze, paragraphCount);
+        const aiScore  = aiResult.score;
+        const botScore = computeBotScore(elem);
+
+        const botFlag = botScore >= BOT_THRESHOLD;
+        const aiFlag  = aiScore  >= AI_THRESHOLD;
+
         if (botFlag || aiFlag) {
-            let reason = "";
-            if (botFlag && aiFlag) { reason = "Bot & AI"; }
-            else if (aiFlag) { reason = "AI"; }
-            else { reason = "Bot"; }
-            
-            // Outline the element only if AI content is detected.
-            if (aiFlag) {
-                elem.style.outline = botFlag ? "3px dashed purple" : "3px dashed blue";
-            }
             elem.setAttribute("data-bot-detected", "true");
+            let reason = "";
+
+            if (botFlag && aiFlag) {
+                elem.classList.add("botAndAiContentDetected");
+                reason = "Bot & AI";
+            } else if (aiFlag) {
+                if (aiScore >= AI_THRESHOLD + CONFIDENCE_HIGH_TIER) {
+                    elem.classList.add("aiContentHigh");
+                    reason = "AI (High Conf)";
+                } else if (aiScore >= AI_THRESHOLD + CONFIDENCE_MID_TIER) {
+                    elem.classList.add("aiContentMid");
+                    reason = "AI (Mid Conf)";
+                } else {
+                    elem.classList.add("aiContentLow");
+                    reason = "AI (Low Conf)";
+                }
+            } else {
+                reason = "Bot";
+            }
+
+            if (botFlag) {
+                const usernameElem = elem.querySelector(USERNAME_SELECTORS);
+                if (usernameElem) usernameElem.classList.add("botUsername");
+            }
+
+            elem.dataset.aiScore   = aiScore.toFixed(2);
+            elem.dataset.botScore  = botScore.toFixed(2);
+            elem.dataset.aiReasons = JSON.stringify(aiResult.reasons);
+
             botCount++;
             detectionIndex++;
-            const elemID = "botbuster-detected-" + detectionIndex;
-            elem.setAttribute("id", elemID);
-            
-            // If the bot condition is met, style the username—unless account age > 60.
-            if (botFlag) {
-                const userElem = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
-                if (userElem) {
-                    let age = getAccountAge(userElem);
-                    if (age === null || age <= 60) {
-                        userElem.classList.add("botUsername");
+            const generatedID = "botbuster-detected-" + detectionIndex;
+            if (!elem.id) elem.setAttribute("id", generatedID);
+            const elemID   = elem.id;
+            const username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || "Unknown";
+
+            detectedBots.push({ username, elemID, reason, botScore, aiScore });
+            updatePopup();
+        }
+    }
+
+    /************************************
+     * 8. INITIALIZATION & OBSERVATION
+     ************************************/
+    function debounce(fn, delay) {
+        let timer;
+        return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+    }
+
+    function scanForBots(root) {
+        root = root || document;
+        const query = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
+        root.querySelectorAll(query).forEach(highlightIfSuspected);
+    }
+
+    loadSettings(() => {
+        createPopupAndTooltip();
+        setTimeout(() => scanForBots(document.body), 1500);
+
+        const scheduleScan = debounce(() => scanForBots(document.body), 100);
+        const observer = new MutationObserver(mutations => {
+            for (const mutation of mutations) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE) {
+                        scheduleScan();
+                        break;
                     }
                 }
             }
-            
-            if (!elem.getAttribute("data-bot-recorded")) {
-                let userElemForRecord = elem.querySelector('a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]');
-                let username = userElemForRecord ? userElemForRecord.innerText.trim() : "Unknown";
-                detectedBots.push({ username: username, elemID: elemID });
-                elem.setAttribute("data-bot-recorded", "true");
-            }
-            updatePopup();
-            console.log("BotBuster: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
-        }
-    }
-
-    function scanForBots(root = document) {
-        const selectors = [
-            'div[data-testid="post-container"]',
-            'div[data-testid="comment"]',
-            'div.thing',
-            'div.Comment'
-        ];
-        const candidates = root.querySelectorAll(selectors.join(', '));
-        candidates.forEach(candidate => {
-            let textContent = candidate.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
-            if (textContent.length > 0) {
-                const currentCount = commentTextMap.get(textContent) || 0;
-                commentTextMap.set(textContent, currentCount + 1);
-            }
-            highlightIfSuspected(candidate);
         });
-    }
-
-    /***********************
-     * INITIALIZATION & OBSERVATION
-     ***********************/
-    scanForBots();
-    const observer = new MutationObserver(mutations => {
-        mutations.forEach(mutation => {
-            mutation.addedNodes.forEach(node => {
-                if (node.nodeType === Node.ELEMENT_NODE) { scanForBots(node); }
-            });
-        });
+        observer.observe(document.body, { childList: true, subtree: true });
     });
-    observer.observe(document.body, { childList: true, subtree: true });
-    setInterval(() => { scanForBots(document); }, 3000);
 })();
