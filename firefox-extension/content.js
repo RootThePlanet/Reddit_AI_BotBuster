@@ -37,10 +37,10 @@
     /************************************
      * 2. CONFIGURATION & STATE
      ************************************/
-    const DEFAULT_AI_THRESHOLD  = 3.5;
+    const DEFAULT_AI_THRESHOLD  = 2.0;
     const DEFAULT_BOT_THRESHOLD = 2.9;
-    const CONFIDENCE_MID_TIER   = 2.5;
-    const CONFIDENCE_HIGH_TIER  = 5.0;
+    const CONFIDENCE_MID_TIER   = 1.5;
+    const CONFIDENCE_HIGH_TIER  = 3.0;
 
     let AI_THRESHOLD  = DEFAULT_AI_THRESHOLD;
     let BOT_THRESHOLD = DEFAULT_BOT_THRESHOLD;
