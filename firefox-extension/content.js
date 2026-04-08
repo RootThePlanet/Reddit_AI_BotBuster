@@ -54,8 +54,7 @@
     ];
     const genericResponses = [
         "i agree dude", "yes you are right", "well said", "totally agree",
-        "i agree", "right you are", "well spoken, you are", "perfectly said this is",
-        "lol", "nice", "true", "this.", "same", "agreed", "exactly", "preach"
+        "i agree", "right you are", "well spoken, you are", "perfectly said this is"
     ];
     const scamLinkRegex = /\.(live|life|shop|xyz|buzz|top|click|fun|site|online|store|blog|app|digital|network|cloud)\b/i;
     const MIN_WORD_COUNT_FOR_AI_DETECTION = 25;
@@ -111,6 +110,15 @@
         return 206.835 - 1.015 * (words.length / sentenceMatches.length) - 84.6 * (syllableCount / words.length);
     }
 
+    function escapeHTML(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     /************************************
      * 5. AI & BOT DETECTION ENGINES
      ************************************/
@@ -142,18 +150,14 @@
         }
 
         const contractions = lowerText.match(/\b(i'm|you're|they're|we're|can't|won't|didn't|isn't|it's)\b/g);
-        if (wordCount > 70 && (!contractions || contractions.length < (wordCount / 100))) {
+        if (wordCount > 150 && (!contractions || contractions.length < (wordCount / 100))) {
             score += 1.8;
             reasons.push("Lacks Contractions [+1.8]");
         }
 
-        const complexSynonyms = {
-            'utilize': 'use', 'leverage': 'use', 'commence': 'start',
-            'facilitate': 'help', 'elucidate': 'explain', 'henceforth': 'from now on',
-            'nevertheless': 'but', 'demonstrate': 'show'
-        };
+        const complexSynonymStems = ['utiliz', 'leverag', 'commenc', 'facilitat', 'elucid', 'henceforth', 'nevertheless', 'demonstrat'];
         let complexWordCount = 0;
-        words.forEach(word => { if (complexSynonyms[word]) complexWordCount++; });
+        words.forEach(word => { if (complexSynonymStems.some(stem => word.startsWith(stem))) complexWordCount++; });
         if (wordCount > 50 && complexWordCount > (wordCount / 75)) {
             const points = complexWordCount * 0.8;
             score += points;
@@ -161,7 +165,7 @@
         }
 
         const personalPhrases = ["i think", "i feel", "i believe", "in my opinion", "in my experience"];
-        if (wordCount > 60 && !personalPhrases.some(p => lowerText.includes(p))) {
+        if (wordCount > 60 && formulaicPhraseCount > 0 && !personalPhrases.some(p => lowerText.includes(p))) {
             score += 1.0;
             reasons.push("Lacks Personal Opinion [+1.0]");
         }
@@ -181,14 +185,20 @@
             }
         }
 
-        if (paragraphCount > 2 && wordCount > 80) {
-            score += 1.5;
-            reasons.push(`Well-structured (${paragraphCount} Paras) [+1.5]`);
+        if (paragraphCount > 3 && wordCount > 80) {
+            score += 0.5;
+            reasons.push(`Well-structured (${paragraphCount} Paras) [+0.5]`);
         }
 
-        if (/[\u{1F600}-\u{1F64F}]/gu.test(text)) {
+        if (/\p{Emoji_Presentation}/gu.test(text)) {
             score -= 1.0;
             reasons.push("Contains Emojis [-1.0]");
+        }
+
+        const readability = computeReadabilityScore(text);
+        if (readability !== null && readability > 80) {
+            score += 0.55;
+            reasons.push("High Readability Score [+0.55]");
         }
 
         return { score: Math.max(0, score), reasons };
@@ -206,7 +216,7 @@
         let score = 0;
         const userElem = elem.querySelector(USERNAME_SELECTORS);
         if (userElem) {
-            score += computeUsernameBotScore(userElem.innerText.trim());
+            score += computeUsernameBotScore(userElem.textContent.trim());
         }
         const textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
@@ -228,8 +238,8 @@
                 <span id="settingsIcon" title="Settings">⚙️</span>
             </div>
             <div id="settingsPanel">
-                <label>AI Threshold: <input type="number" id="aiThresholdInput" step="0.1" min="1"></label>
-                <label>Bot Threshold: <input type="number" id="botThresholdInput" step="0.1" min="1"></label>
+                <label>AI Threshold: <input type="number" id="aiThresholdInput" step="0.1" min="0.1"></label>
+                <label>Bot Threshold: <input type="number" id="botThresholdInput" step="0.1" min="0.1"></label>
                 <button id="saveSettingsBtn">Save</button>
             </div>
             <div id="botDropdown"></div>`;
@@ -257,8 +267,8 @@
 
         document.getElementById("saveSettingsBtn").addEventListener("click", e => {
             e.stopPropagation();
-            const aiVal  = parseFloat(document.getElementById("aiThresholdInput").value);
-            const botVal = parseFloat(document.getElementById("botThresholdInput").value);
+            const aiVal  = Math.max(0.1, parseFloat(document.getElementById("aiThresholdInput").value) || DEFAULT_AI_THRESHOLD);
+            const botVal = Math.max(0.1, parseFloat(document.getElementById("botThresholdInput").value) || DEFAULT_BOT_THRESHOLD);
             saveSettings(aiVal, botVal);
             e.target.innerText = "Saved!";
             setTimeout(() => { e.target.innerText = "Save"; }, 1500);
@@ -269,10 +279,10 @@
             if (flaggedElem) {
                 let aiReasons = [];
                 try { aiReasons = JSON.parse(flaggedElem.dataset.aiReasons || '[]'); } catch (e) { /* ignore corrupt data */ }
-                const reasonsHTML = aiReasons.map(r => `<li>${r}</li>`).join('');
+                const reasonsHTML = aiReasons.map(r => `<li>${escapeHTML(String(r))}</li>`).join('');
                 const botScore = parseFloat(flaggedElem.dataset.botScore).toFixed(1);
                 const aiScore  = parseFloat(flaggedElem.dataset.aiScore).toFixed(1);
-                tooltip.innerHTML = `<strong>Bot Score:</strong> ${botScore} / ${BOT_THRESHOLD}<br><strong>AI Score:</strong> ${aiScore} / ${AI_THRESHOLD}<ul>${reasonsHTML}</ul>`;
+                tooltip.innerHTML = `<strong>Bot Score:</strong> ${escapeHTML(botScore)} / ${escapeHTML(String(BOT_THRESHOLD))}<br><strong>AI Score:</strong> ${escapeHTML(aiScore)} / ${escapeHTML(String(AI_THRESHOLD))}<ul>${reasonsHTML}</ul>`;
                 tooltip.style.display = 'block';
             }
         });
@@ -286,7 +296,7 @@
     }
 
     function updatePopup() {
-        document.querySelector("#botPopupHeader > span").innerText = `Detected bot/AI: ${botCount}`;
+        document.querySelector("#botPopupHeader > span").textContent = `Detected bot/AI: ${botCount}`;
         const dropdown = document.getElementById("botDropdown");
         dropdown.innerHTML = "";
         if (detectedBots.length === 0) {
@@ -298,7 +308,7 @@
                 .forEach(item => {
                     const link = document.createElement("a");
                     link.href = "#" + item.elemID;
-                    link.innerText = `${item.username} (${item.reason})`;
+                    link.textContent = `${item.username} (${item.reason})`;
                     link.title = `Bot Score: ${item.botScore.toFixed(1)}, AI Score: ${item.aiScore.toFixed(1)}`;
                     link.addEventListener('click', e => {
                         e.preventDefault();
@@ -370,9 +380,10 @@
 
             botCount++;
             detectionIndex++;
-            const elemID   = "botbuster-detected-" + detectionIndex;
-            elem.setAttribute("id", elemID);
-            const username = elem.querySelector(USERNAME_SELECTORS)?.innerText.trim() || "Unknown";
+            const generatedID = "botbuster-detected-" + detectionIndex;
+            if (!elem.id) elem.setAttribute("id", generatedID);
+            const elemID   = elem.id;
+            const username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || "Unknown";
 
             detectedBots.push({ username, elemID, reason, botScore, aiScore });
             updatePopup();
@@ -382,6 +393,11 @@
     /************************************
      * 8. INITIALIZATION & OBSERVATION
      ************************************/
+    function debounce(fn, delay) {
+        let timer;
+        return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+    }
+
     function scanForBots(root) {
         root = root || document;
         const query = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
@@ -392,11 +408,16 @@
         createPopupAndTooltip();
         setTimeout(() => scanForBots(document.body), 1500);
 
+        const scheduleScan = debounce(() => scanForBots(document.body), 100);
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (node.nodeType === Node.ELEMENT_NODE) {
-                        requestAnimationFrame(() => scanForBots(node));
+                        // Trigger one debounced full-page scan rather than per-node scans.
+                        // The debounce ensures all nodes added in rapid succession are
+                        // covered by the single scanForBots(document.body) call.
+                        scheduleScan();
+                        break;
                     }
                 }
             }
