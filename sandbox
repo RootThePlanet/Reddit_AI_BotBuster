@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Reddit AI BotBuster
+// @name         Redd-Eye
 // @namespace    http://tampermonkey.net/
 // @version      2.11.18
 // @description  Detects suspected bot accounts and AI-generated content on both new and old Reddit using advanced heuristics. Established accounts (>5 years) aren’t flagged as bots.
@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    console.log("BotBuster: Script loaded (v2.11.18)");
+    console.log("Redd-Eye: Script loaded (v2.11.18)");
 
     /***********************
      * Inject CSS for Basic Styling
@@ -398,9 +398,9 @@
     updatePopup();
 
     /***********************
-     * KEY FUNCTION: BotBuster Highlight
+     * KEY FUNCTION: Redd-Eye Highlight
      ***********************/
-    function botBusterHighlight(elem) {
+    function reddEyeHighlight(elem) {
         if (elem.getAttribute("data-bot-detected") === "true") return;
         const flags = countRedFlags(elem);
         const botFlag = flags.botScore >= BOT_THRESHOLD;
@@ -416,7 +416,7 @@
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
             detectionIndex++;
-            const elemID = "botbuster-detected-" + detectionIndex;
+            const elemID = "reddeye-detected-" + detectionIndex;
             elem.setAttribute("id", elemID);
             let username = "";
             let userElem = elem.querySelector('a[data-click-id="user"], a.author, a[href*="/user/"]');
@@ -443,7 +443,7 @@
                 elem.setAttribute("data-bot-recorded", "true");
             }
             updatePopup();
-            console.log("BotBuster: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
+            console.log("Redd-Eye: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
         }
     }
 
@@ -455,12 +455,12 @@
         userLinks.forEach(link => {
             let container = link.closest('article, shreddit-post, div[data-testid="post-container"], div[data-testid="comment"], div.Comment, div.Post, div.scrollerItem, div[slot="comment"]');
             if (container) {
-                botBusterHighlight(container);
+                reddEyeHighlight(container);
             }
         });
         const postElements = root.querySelectorAll('shreddit-post[author]');
         postElements.forEach(post => {
-            botBusterHighlight(post);
+            reddEyeHighlight(post);
         });
     }
 
@@ -485,7 +485,7 @@
                 const currentCount = commentTextMap.get(textContent) || 0;
                 commentTextMap.set(textContent, currentCount + 1);
             }
-            botBusterHighlight(candidate);
+            reddEyeHighlight(candidate);
         });
         // Recursively scan for shadow roots.
         const allElems = root.querySelectorAll("*");
@@ -500,7 +500,7 @@
      * INITIALIZATION & OBSERVATION
      ***********************/
     const mainContainer = document.querySelector("#SHORTCUT_FOCUSABLE_DIV") || document.body;
-    console.log("BotBuster: Using main container:", mainContainer);
+    console.log("Redd-Eye: Using main container:", mainContainer);
     scanForBots(mainContainer);
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {

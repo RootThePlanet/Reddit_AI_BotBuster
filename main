@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Reddit AI BotBuster (Enhanced UX - Complete)
+// @name         Redd-Eye (Enhanced UX - Complete)
 // @namespace    http://tampermonkey.net/
 // @version      4.1.0
 // @description  Detects suspected bot accounts and AI-generated content on Reddit with a transparent, configurable, and research-based engine.

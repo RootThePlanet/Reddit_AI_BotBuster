@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Reddit AI BotBuster",
+  "name": "Redd-Eye",
   "description": "Detect suspected bot accounts and AI-generated content on Reddit using advanced heuristics.",
   "version": "4.2.0",
   "permissions": ["storage"],
   "browser_specific_settings": {
     "gecko": {
-      "id": "reddit-aibotbuster@example.com"
+      "id": "redd-eye@example.com"
     }
   },
   "icons": {
@@ -16,7 +16,7 @@
     "128": "icons/icon-128.png"
   },
   "action": {
-    "default_title": "Reddit AI BotBuster",
+    "default_title": "Redd-Eye",
     "default_icon": {
       "32": "icons/icon-32.png",
       "48": "icons/icon-48.png",

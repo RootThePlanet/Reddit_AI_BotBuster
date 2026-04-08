@@ -1,5 +1,5 @@
 /*
- Reddit AI BotBuster WebExtension content script (Chrome).
+ Redd-Eye WebExtension content script (Chrome).
  Version 4.2.0
  */
 
@@ -80,7 +80,7 @@
                 BOT_THRESHOLD = result.bot_threshold;
                 callback();
             })
-            .catch(err => { console.warn('BotBuster: Failed to load settings:', err); callback(); });
+            .catch(err => { console.warn('Redd-Eye: Failed to load settings:', err); callback(); });
     }
 
     function saveSettings(aiVal, botVal) {
@@ -474,7 +474,7 @@
 
             botCount++;
             detectionIndex++;
-            const generatedID = "botbuster-detected-" + detectionIndex;
+            const generatedID = "reddeye-detected-" + detectionIndex;
             if (!elem.id) elem.setAttribute("id", generatedID);
             const elemID   = elem.id;
             const username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || "Unknown";

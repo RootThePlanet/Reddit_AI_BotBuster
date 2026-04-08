@@ -1,7 +1,7 @@
 /**
  * detection-logic.js
  *
- * Pure-function extraction of the Reddit AI BotBuster detection engine.
+ * Pure-function extraction of the Redd-Eye detection engine.
  * These functions are identical to the logic in firefox-extension/content.js
  * and are exported here solely so they can be unit-tested without a browser
  * environment.

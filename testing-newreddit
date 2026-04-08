@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Reddit AI BotBuster (New Reddit Only - v2.13.0)
+// @name         Redd-Eye (New Reddit Only - v2.13.0)
 // @namespace    http://tampermonkey.net/
 // @version      2.13.0
 // @description  Revised heuristics for detecting bot accounts and AI-generated content on new Reddit. Bot usernames are forced to orange (14px) and AI content is outlined.
@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    console.log("BotBuster (New Reddit Only): Script loaded (v2.13.0)");
+    console.log("Redd-Eye (New Reddit Only): Script loaded (v2.13.0)");
 
     /***********************
      * Inject basic CSS
@@ -300,7 +300,7 @@
             elem.setAttribute("data-bot-detected", "true");
             botCount++;
             detectionIndex++;
-            const elemID = "botbuster-detected-" + detectionIndex;
+            const elemID = "reddeye-detected-" + detectionIndex;
             elem.setAttribute("id", elemID);
             let username = "";
             let userElem = elem.querySelector('a[data-testid="post_author_link"], a[data-click-id="user"], a.author, a[href*="/user/"]');
@@ -325,7 +325,7 @@
                 elem.setAttribute("data-bot-recorded", "true");
             }
             updatePopup();
-            console.log("BotBuster: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
+            console.log("Redd-Eye: Flagged element. BotScore:", flags.botScore, "AI Score:", flags.aiScore);
         }
     }
 
@@ -378,7 +378,7 @@
      * INITIALIZATION & OBSERVATION (New Reddit Only)
      ***********************/
     const mainContainer = document.querySelector("#SHORTCUT_FOCUSABLE_DIV") || document.body;
-    console.log("BotBuster (New Reddit Only): Using main container:", mainContainer);
+    console.log("Redd-Eye (New Reddit Only): Using main container:", mainContainer);
     scanForBots(mainContainer);
     const observer = new MutationObserver(mutations => {
         mutations.forEach(mutation => {
