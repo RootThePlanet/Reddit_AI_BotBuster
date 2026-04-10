@@ -36,11 +36,7 @@ The extension analyzes content using a multi-layered heuristic engine inspired b
 5. Browse to the `firefox-extension/` folder and select the `manifest.json` file.
 6. The extension is now active. It will remain loaded until you restart Firefox.
 
-#### Option B — Install as a Permanent Extension via Firefox Add-ons (AMO)
-
-If the extension is published on [addons.mozilla.org](https://addons.mozilla.org), you can install it directly from there like any other Firefox add-on. Once installed it will persist across browser restarts and update automatically.
-
-#### Option C — Pack and Install as a Signed Extension (self-distribution)
+#### Option B — Pack and Install as a Signed Extension (self-distribution)
 
 1. Ensure you have [Node.js](https://nodejs.org) and [`web-ext`](https://github.com/mozilla/web-ext) installed:
    ```
@@ -64,10 +60,6 @@ If the extension is published on [addons.mozilla.org](https://addons.mozilla.org
 4. Click **"Load unpacked"**.
 5. Browse to and select the `chrome-extension/` folder.
 6. The extension is now active.
-
-#### Option B — Install from the Chrome Web Store
-
-If the extension is published on the [Chrome Web Store](https://chrome.google.com/webstore), you can install it directly from there like any other Chrome extension. Once installed it will persist across browser restarts and update automatically.
 
 ## Usage Guide
 
