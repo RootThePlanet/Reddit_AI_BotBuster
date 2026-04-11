@@ -28,9 +28,6 @@
       "matches": [
         "*://www.reddit.com/*"
       ],
-      "exclude_matches": [
-        "*://old.reddit.com/*"
-      ],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
