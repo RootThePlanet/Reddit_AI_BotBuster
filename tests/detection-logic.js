@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 // Constants (mirrors firefox-extension/content.js §2)
 // ---------------------------------------------------------------------------
-const DEFAULT_AI_THRESHOLD  = 3.5;
+const DEFAULT_AI_THRESHOLD  = 2.5;
 const DEFAULT_BOT_THRESHOLD = 2.9;
 const CONFIDENCE_MID_TIER   = 2.5;
 const CONFIDENCE_HIGH_TIER  = 5.0;
@@ -265,6 +265,108 @@ function computeAIScore(text, paragraphCount) {
     if (listItemCount >= 3) {
         score += 1.5;
         reasons.push("Structured List Pattern [+1.5]");
+    }
+
+    // CHECK 14: Vocabulary diversity (Type-Token Ratio)
+    // AI text tends to have lower lexical diversity — it reuses words more often
+    if (wordCount >= 50) {
+        const uniqueWords = new Set(words);
+        const ttr = uniqueWords.size / wordCount;
+        if (ttr < 0.4) {
+            score += 1.2;
+            reasons.push("Low Vocabulary Diversity [+1.2]");
+        } else if (ttr > 0.75) {
+            score -= 0.5;
+            reasons.push("High Vocabulary Diversity (Human-like) [-0.5]");
+        }
+    }
+
+    // CHECK 15: Repetitive sentence starters
+    // AI often starts consecutive sentences the same way ("The", "It", "This")
+    if (sentencesArr.length >= 4) {
+        const starters = sentencesArr.map(s => {
+            const firstWord = s.trim().split(/\s+/)[0];
+            return firstWord ? firstWord.toLowerCase() : '';
+        }).filter(w => w.length > 0);
+        if (starters.length >= 3) {
+            const starterCounts = {};
+            starters.forEach(s => { starterCounts[s] = (starterCounts[s] || 0) + 1; });
+            const maxRepeat = Math.max(...Object.values(starterCounts));
+            const repeatRatio = maxRepeat / starters.length;
+            if (repeatRatio >= 0.5 && maxRepeat >= 3) {
+                score += 1.5;
+                reasons.push("Repetitive Sentence Starters [+1.5]");
+            }
+        }
+    }
+
+    // CHECK 16: Hedging / qualifying language density
+    // AI overuses softening phrases to sound balanced
+    const hedgingPhrases = [
+        "it depends", "it varies", "to some extent", "in some cases",
+        "it may", "it might", "it could", "it is possible",
+        "there are many", "there are several", "there are various",
+        "while it", "although it", "on one hand", "on the other",
+        "depending on", "this may vary", "results may vary",
+        "keep in mind", "bear in mind", "worth considering",
+        "it is worth mentioning", "it should be mentioned"
+    ];
+    const hedgingCount = hedgingPhrases.filter(phrase => lowerText.includes(phrase)).length;
+    if (hedgingCount >= 2) {
+        const points = Math.min(hedgingCount * 0.7, 2.8);
+        score += points;
+        reasons.push(`Hedging Language Density [+${points.toFixed(1)}]`);
+    }
+
+    // CHECK 17: Word-level entropy analysis
+    // AI text has more predictable word distributions; low entropy = more AI-like
+    if (wordCount >= 40) {
+        const wordFreq = {};
+        words.forEach(w => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
+        let entropy = 0;
+        const total = words.length;
+        Object.values(wordFreq).forEach(count => {
+            const p = count / total;
+            if (p > 0) entropy -= p * Math.log2(p);
+        });
+        // Normalize by max possible entropy for this word count
+        const maxEntropy = Math.log2(total);
+        const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 1;
+        if (normalizedEntropy < 0.75) {
+            score += 1.0;
+            reasons.push("Low Word Entropy [+1.0]");
+        }
+    }
+
+    // CHECK 18: Discourse connective overuse
+    // AI text chains excessive connective phrases to appear logical and well-organized
+    const discourseConnectives = [
+        "however", "therefore", "thus", "hence", "consequently",
+        "additionally", "similarly", "specifically", "notably",
+        "accordingly", "meanwhile", "nonetheless", "conversely",
+        "subsequently", "alternatively", "likewise"
+    ];
+    let connectiveCount = 0;
+    discourseConnectives.forEach(conn => {
+        const regex = new RegExp('\\b' + conn + '\\b', 'gi');
+        const matches = lowerText.match(regex);
+        if (matches) connectiveCount += matches.length;
+    });
+    if (wordCount >= 40 && connectiveCount / wordCount > 0.02) {
+        const points = Math.min(connectiveCount * 0.5, 2.0);
+        score += points;
+        reasons.push(`Discourse Connective Overuse [+${points.toFixed(1)}]`);
+    }
+
+    // CHECK 19: Predictable paragraph structure (intro → body → conclusion)
+    // AI commonly follows a rigid template
+    if (paragraphCount >= 3 && wordCount >= 60) {
+        const hasIntroPattern = /^(in this|this (post|article|comment|response)|let me|i'?d like to|here('?s| is)|allow me)/i.test(text.trim());
+        const hasConclusionPattern = /(in conclusion|to summarize|overall|in summary|to sum up|all in all|in the end)\s/i.test(lowerText);
+        if (hasIntroPattern && hasConclusionPattern) {
+            score += 1.5;
+            reasons.push("Predictable Structure (Intro/Conclusion) [+1.5]");
+        }
     }
 
     return { score: Math.max(0, score), reasons };
