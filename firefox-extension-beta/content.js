@@ -185,6 +185,7 @@
     let botCount = 0;
     let detectedBots = [];
     let detectionIndex = 0;
+    let isNavigating = false;
 
     /************************************
      * 3. PERSISTENT SETTINGS via browser.storage.local
@@ -802,6 +803,7 @@
     }
 
     function highlightIfSuspected(elem) {
+        if (isNavigating) return;
         if (elem.getAttribute("data-bot-detected")) return;
 
         const { textToAnalyze, paragraphCount } = getTextToAnalyze(elem);
@@ -927,9 +929,11 @@
      * 9. INITIALIZATION & OBSERVATION
      ************************************/
     let scheduleScan;
+    let navigationTimer = null;
 
     /** Reset detection state and widget when Reddit SPA-navigates to a new page. */
     function resetDetectionState() {
+        isNavigating = true;
         botCount = 0;
         detectedBots = [];
         detectionIndex = 0;
@@ -1003,7 +1007,11 @@
 
         monitorNavigation(() => {
             resetDetectionState();
-            setTimeout(() => fullThreadScan(), 1500);
+            clearTimeout(navigationTimer);
+            navigationTimer = setTimeout(() => {
+                isNavigating = false;
+                fullThreadScan();
+            }, 1500);
         });
     });
 })();
