@@ -1,0 +1,1 @@
+beta firefox extension. building version that works on new reddit
