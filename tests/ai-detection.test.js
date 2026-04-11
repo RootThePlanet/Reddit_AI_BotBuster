@@ -222,8 +222,9 @@ describe('computeAIScore — lacks contractions (check 4)', () => {
 // ---------------------------------------------------------------------------
 describe('computeAIScore — emoji presence (check 9)', () => {
     test('reduces score for text containing an emoji', () => {
-        const textWithEmoji = makePadding(35) + ' I love this 😊';
-        const textWithout   = makePadding(35);
+        const base = makePadding(50);
+        const textWithEmoji = base + ' I love this 😊';
+        const textWithout   = base + ' I love this one';
         const scoreWith    = computeAIScore(textWithEmoji).score;
         const scoreWithout = computeAIScore(textWithout).score;
         // The emoji variant should score <= the no-emoji variant (it deducts 1.0)
@@ -353,6 +354,127 @@ describe('computeAIScore — structured list patterns (check 13)', () => {
             '2. Second item\n';
         const result = computeAIScore(listText);
         expect(result.reasons.some(r => r.includes('Structured List'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 14: Vocabulary diversity (Type-Token Ratio)
+// ---------------------------------------------------------------------------
+describe('computeAIScore — vocabulary diversity (check 14)', () => {
+    test('penalises low vocabulary diversity (highly repetitive text)', () => {
+        // Same words repeated many times → TTR < 0.4
+        const repetitiveText = Array(10).fill(
+            'The system is designed to be efficient and reliable.'
+        ).join(' ');
+        const result = computeAIScore(repetitiveText);
+        expect(result.reasons.some(r => r.includes('Vocabulary Diversity'))).toBe(true);
+    });
+
+    test('does NOT trigger for text under 50 words', () => {
+        const shortText = Array(3).fill('The cat sat on the mat by the door.').join(' ');
+        const result = computeAIScore(shortText);
+        expect(result.reasons.some(r => r.includes('Vocabulary Diversity'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 15: Repetitive sentence starters
+// ---------------------------------------------------------------------------
+describe('computeAIScore — repetitive sentence starters (check 15)', () => {
+    test('detects repeated sentence starters', () => {
+        const text =
+            'The system is very robust. The approach works well. ' +
+            'The results are clear. The methodology is sound. ' +
+            'People agree with this. Something else entirely here.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Repetitive Sentence Starters'))).toBe(true);
+    });
+
+    test('does NOT trigger with diverse sentence starters', () => {
+        const text =
+            'Dogs are wonderful companions for many people. ' +
+            'Cats also make excellent pets for apartment living. ' +
+            'Birds can be surprisingly affectionate to their owners. ' +
+            'Fish require minimal interaction but provide calming presence. ' +
+            'Rabbits are great choices for families with young children.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Repetitive Sentence Starters'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 16: Hedging language density
+// ---------------------------------------------------------------------------
+describe('computeAIScore — hedging language (check 16)', () => {
+    test('detects heavy hedging language', () => {
+        const hedgingText = makePadding(30) +
+            ' It depends on the situation. In some cases, it may not work. ' +
+            'It could be different depending on the context. Keep in mind that results may vary.';
+        const result = computeAIScore(hedgingText);
+        expect(result.reasons.some(r => r.includes('Hedging Language'))).toBe(true);
+    });
+
+    test('does NOT trigger for single hedging phrase', () => {
+        const text = makePadding(30) + ' It depends on the situation.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Hedging Language'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 17: Word-level entropy
+// ---------------------------------------------------------------------------
+describe('computeAIScore — word entropy (check 17)', () => {
+    test('detects low entropy (repetitive word usage)', () => {
+        // Repeat a short set of words many times for low entropy
+        const lowEntropyText = Array(15).fill(
+            'The system is designed to be efficient.'
+        ).join(' ');
+        const result = computeAIScore(lowEntropyText);
+        expect(result.reasons.some(r => r.includes('Word Entropy'))).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 18: Discourse connective overuse
+// ---------------------------------------------------------------------------
+describe('computeAIScore — discourse connective overuse (check 18)', () => {
+    test('detects excessive discourse connectives', () => {
+        const text = makePadding(30) +
+            ' However, this approach has merits. Therefore, we should consider it carefully. ' +
+            'Additionally, the results are promising. Consequently, the team decided to proceed. ' +
+            'Furthermore, the data supports this conclusion. Nonetheless, some concerns remain.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Discourse Connective'))).toBe(true);
+    });
+
+    test('does NOT trigger for normal connective usage', () => {
+        const text = makePadding(60) + ' However, I disagree with that point.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Discourse Connective'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 19: Predictable paragraph structure
+// ---------------------------------------------------------------------------
+describe('computeAIScore — predictable structure (check 19)', () => {
+    test('detects intro/conclusion template pattern', () => {
+        const text =
+            'In this post, I will explain the key factors to consider when making this decision. ' +
+            'There are several important points worth discussing in great detail for our audience. ' +
+            'The first consideration is the overall cost and benefit analysis of this approach. ' +
+            'The second factor involves the long-term sustainability of the proposed approach overall. ' +
+            'The third point relates to the practical implementation and resource allocation needed. ' +
+            'In conclusion, the evidence strongly supports moving forward with this particular plan.';
+        const result = computeAIScore(text, 3);
+        expect(result.reasons.some(r => r.includes('Predictable Structure'))).toBe(true);
+    });
+
+    test('does NOT trigger without both intro and conclusion patterns', () => {
+        const text = makePadding(70) + ' The data shows interesting results.';
+        const result = computeAIScore(text, 3);
+        expect(result.reasons.some(r => r.includes('Predictable Structure'))).toBe(false);
     });
 });
 
