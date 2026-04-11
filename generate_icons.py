@@ -3,6 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 sizes = [16, 32, 48, 64, 96, 128]
+SUPERSAMPLING_SCALE = 4
 output_dirs = [
     Path("assets/icons"),
     Path("chrome-extension/icons"),
@@ -17,7 +18,7 @@ def lerp_color(start, end, t):
 
 def draw_redd_eye_icon(size):
     """Render a red-eye themed icon for the given square pixel size."""
-    scale = 4
+    scale = SUPERSAMPLING_SCALE
     large = size * scale
     cx = cy = large // 2
 
