@@ -17,7 +17,14 @@ def lerp_color(start, end, t):
 
 
 def draw_redd_eye_icon(size):
-    """Render a red-eye themed icon for the given square pixel size."""
+    """Render a red-eye themed icon for the given square pixel size.
+
+    Args:
+        size (int): The width and height of the output icon in pixels.
+
+    Returns:
+        Image: A PIL Image object containing the rendered icon.
+    """
     scale = SUPERSAMPLING_SCALE
     large = size * scale
     cx = cy = large // 2
