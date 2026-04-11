@@ -498,6 +498,51 @@
         root.querySelectorAll(query).forEach(highlightIfSuspected);
     }
 
+    /** Reset detection state and widget when Reddit SPA-navigates to a new page. */
+    function resetDetectionState() {
+        botCount = 0;
+        detectedBots = [];
+        detectionIndex = 0;
+        document.querySelectorAll('[data-bot-detected]').forEach(el => {
+            el.removeAttribute('data-bot-detected');
+            el.classList.remove('botAndAiContentDetected', 'aiContentLow', 'aiContentMid', 'aiContentHigh');
+            delete el.dataset.aiScore;
+            delete el.dataset.botScore;
+            delete el.dataset.aiReasons;
+        });
+        document.querySelectorAll('.botUsername').forEach(el => el.classList.remove('botUsername'));
+        updatePopup();
+    }
+
+    /**
+     * Monitor SPA navigation.  Reddit uses History API pushState/replaceState
+     * to navigate without full page reloads.  We intercept those calls (plus
+     * popstate for Back/Forward) so we can reset and re-scan for every page.
+     */
+    function monitorNavigation(onNavigate) {
+        let lastURL = location.href;
+        const handleURLChange = () => {
+            if (location.href !== lastURL) {
+                lastURL = location.href;
+                onNavigate();
+            }
+        };
+
+        const origPushState = history.pushState.bind(history);
+        history.pushState = function(...args) {
+            origPushState(...args);
+            handleURLChange();
+        };
+
+        const origReplaceState = history.replaceState.bind(history);
+        history.replaceState = function(...args) {
+            origReplaceState(...args);
+            handleURLChange();
+        };
+
+        window.addEventListener('popstate', handleURLChange);
+    }
+
     loadSettings(() => {
         createPopupAndTooltip();
         setTimeout(() => scanForBots(document.body), 1500);
@@ -517,5 +562,10 @@
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
+
+        monitorNavigation(() => {
+            resetDetectionState();
+            setTimeout(() => scanForBots(document.body), 1500);
+        });
     });
 })();
