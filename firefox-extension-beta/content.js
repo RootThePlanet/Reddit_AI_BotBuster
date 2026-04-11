@@ -520,13 +520,15 @@
                 const firstWord = s.trim().split(/\s+/)[0];
                 return firstWord ? firstWord.toLowerCase() : '';
             }).filter(w => w.length > 0);
-            const starterCounts = {};
-            starters.forEach(s => { starterCounts[s] = (starterCounts[s] || 0) + 1; });
-            const maxRepeat = Math.max(...Object.values(starterCounts));
-            const repeatRatio = maxRepeat / starters.length;
-            if (repeatRatio >= 0.5 && maxRepeat >= 3) {
-                score += 1.5;
-                reasons.push("Repetitive Sentence Starters [+1.5]");
+            if (starters.length >= 3) {
+                const starterCounts = {};
+                starters.forEach(s => { starterCounts[s] = (starterCounts[s] || 0) + 1; });
+                const maxRepeat = Math.max(...Object.values(starterCounts));
+                const repeatRatio = maxRepeat / starters.length;
+                if (repeatRatio >= 0.5 && maxRepeat >= 3) {
+                    score += 1.5;
+                    reasons.push("Repetitive Sentence Starters [+1.5]");
+                }
             }
         }
 
@@ -719,7 +721,7 @@
                                     parent.open = true;
                                 }
                                 const moreBtn = parent.querySelector('[id*="morechildren"], button[data-testid="comment-more-children"]');
-                                if (moreBtn) moreBtn.click();
+                                if (moreBtn) { try { moreBtn.click(); } catch (_) { /* ignore click errors */ } }
                                 parent = parent.parentElement;
                             }
                             targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -936,28 +938,16 @@
 
         /* Observe the entire document for new content (lazy-loaded comments, "load more", etc.) */
         const observer = new MutationObserver(mutations => {
-            let hasNewContent = false;
-            for (const mutation of mutations) {
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        hasNewContent = true;
-                        break;
-                    }
-                }
-                if (hasNewContent) break;
-            }
-            if (hasNewContent) {
+            if (mutations.some(m => Array.from(m.addedNodes).some(n => n.nodeType === Node.ELEMENT_NODE))) {
                 scheduleScan();
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
         /* Periodic re-scan to catch dynamically rendered content (e.g., virtual scrolling) */
+        const unscannedSelector = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
         setInterval(() => {
-            const unscanned = document.querySelectorAll(
-                CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ')
-            );
-            if (unscanned.length > 0) {
+            if (document.querySelectorAll(unscannedSelector).length > 0) {
                 fullThreadScan();
             }
         }, 5000);

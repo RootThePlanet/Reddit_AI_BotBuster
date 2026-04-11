@@ -288,13 +288,15 @@ function computeAIScore(text, paragraphCount) {
             const firstWord = s.trim().split(/\s+/)[0];
             return firstWord ? firstWord.toLowerCase() : '';
         }).filter(w => w.length > 0);
-        const starterCounts = {};
-        starters.forEach(s => { starterCounts[s] = (starterCounts[s] || 0) + 1; });
-        const maxRepeat = Math.max(...Object.values(starterCounts));
-        const repeatRatio = maxRepeat / starters.length;
-        if (repeatRatio >= 0.5 && maxRepeat >= 3) {
-            score += 1.5;
-            reasons.push("Repetitive Sentence Starters [+1.5]");
+        if (starters.length >= 3) {
+            const starterCounts = {};
+            starters.forEach(s => { starterCounts[s] = (starterCounts[s] || 0) + 1; });
+            const maxRepeat = Math.max(...Object.values(starterCounts));
+            const repeatRatio = maxRepeat / starters.length;
+            if (repeatRatio >= 0.5 && maxRepeat >= 3) {
+                score += 1.5;
+                reasons.push("Repetitive Sentence Starters [+1.5]");
+            }
         }
     }
 
