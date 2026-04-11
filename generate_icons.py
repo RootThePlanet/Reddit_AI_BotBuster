@@ -11,10 +11,12 @@ output_dirs = [
 
 
 def lerp_color(start, end, t):
+    """Linearly interpolate between two RGBA colors."""
     return tuple(int(start[i] + (end[i] - start[i]) * t) for i in range(4))
 
 
 def draw_redd_eye_icon(size):
+    """Render a red-eye themed icon for the given square pixel size."""
     scale = 4
     large = size * scale
     cx = cy = large // 2
