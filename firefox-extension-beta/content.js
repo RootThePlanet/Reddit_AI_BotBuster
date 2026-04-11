@@ -929,6 +929,7 @@
      * 9. INITIALIZATION & OBSERVATION
      ************************************/
     let scheduleScan;
+    let navigationTimer = null;
 
     /** Reset detection state and widget when Reddit SPA-navigates to a new page. */
     function resetDetectionState() {
@@ -1006,7 +1007,8 @@
 
         monitorNavigation(() => {
             resetDetectionState();
-            setTimeout(() => {
+            clearTimeout(navigationTimer);
+            navigationTimer = setTimeout(() => {
                 isNavigating = false;
                 fullThreadScan();
             }, 1500);
