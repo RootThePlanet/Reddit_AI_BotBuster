@@ -1,6 +1,6 @@
 /*
  Redd-Eye – Firefox WebExtension content script.
- Version 4.2.0
+ Version 5.0.0 – Supports both www.reddit.com and old.reddit.com.
  */
 
 (function() {
@@ -17,27 +17,134 @@
         .aiContentMid  { outline: 3px dashed #0056b3 !important; outline-offset: -3px; }
         .aiContentHigh { outline: 3px solid  #00234d !important; outline-offset: -3px; }
 
-        #botCounterPopup { position: fixed; top: 40px; right: 10px; width: 280px; z-index: 9999; background-color: rgba(248,248,248,0.9); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-family: 'Verdana', sans-serif; font-size: 12px; border: 1px solid #ccc; user-select: none; }
-        #botPopupHeader { display: flex; justify-content: space-between; align-items: center; font-weight: bold; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-        #settingsIcon { cursor: pointer; font-size: 16px; margin-left: 10px; }
-        #settingsPanel { display: none; padding: 10px; border-top: 1px solid #eee; }
-        #settingsPanel label { display: block; margin: 5px 0; }
-        #settingsPanel input { width: 50px; margin-left: 10px; }
-        #saveSettingsBtn { background-color: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; margin-top: 10px; }
-        #saveSettingsBtn:hover { background-color: #0056b3; }
-        #botDropdown { display: none; max-height: 300px; overflow-y: auto; padding: 5px 0; }
-        #botDropdown a { display: block; padding: 3px 10px; text-decoration: none; color: #333; }
-        #botDropdown a:hover { background-color: rgba(0,0,0,0.08); }
-        #aiScoreTooltip { position: fixed; display: none; background: #222; color: #fff; border-radius: 5px; padding: 8px; font-size: 12px; z-index: 10000; max-width: 300px; pointer-events: none; }
-        #aiScoreTooltip ul { margin: 0; padding: 0 0 0 15px; }
-        #aiScoreTooltip li { margin-bottom: 3px; }
+        #botCounterPopup {
+            position: fixed;
+            bottom: 16px;
+            left: 16px;
+            width: 300px;
+            z-index: 99999;
+            background: rgba(30, 30, 30, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 13px;
+            color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.08);
+            user-select: none;
+            transition: opacity 0.2s;
+        }
+        #botCounterPopup:hover { opacity: 1 !important; }
+
+        #botPopupHeader {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            padding: 12px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            letter-spacing: 0.3px;
+        }
+        #botPopupHeader span:first-child {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #botPopupHeader .reddeye-logo {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+        }
+        #settingsIcon {
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+        #settingsIcon:hover { opacity: 1; }
+        #settingsPanel {
+            display: none;
+            padding: 12px 14px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            background: rgba(0,0,0,0.2);
+        }
+        #settingsPanel label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 6px 0;
+            font-size: 12px;
+            color: #b0b0b0;
+        }
+        #settingsPanel input {
+            width: 60px;
+            margin-left: 10px;
+            padding: 4px 6px;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 4px;
+            background: rgba(255,255,255,0.08);
+            color: #e0e0e0;
+            font-size: 12px;
+        }
+        #saveSettingsBtn {
+            background: linear-gradient(135deg, #ff4500, #ff6a33);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 14px;
+            cursor: pointer;
+            margin-top: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            width: 100%;
+            transition: filter 0.15s;
+        }
+        #saveSettingsBtn:hover { filter: brightness(1.1); }
+
+        #botDropdown {
+            display: none;
+            max-height: 260px;
+            overflow-y: auto;
+            padding: 4px 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+        #botDropdown a {
+            display: block;
+            padding: 6px 14px;
+            text-decoration: none;
+            color: #c0c0c0;
+            font-size: 12px;
+            transition: background-color 0.1s;
+        }
+        #botDropdown a:hover { background-color: rgba(255,255,255,0.06); color: #fff; }
+
+        #aiScoreTooltip {
+            position: fixed;
+            display: none;
+            background: rgba(20, 20, 20, 0.95);
+            color: #e8e8e8;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 12px;
+            z-index: 100000;
+            max-width: 320px;
+            pointer-events: none;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.1);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #aiScoreTooltip ul { margin: 4px 0 0; padding: 0 0 0 16px; }
+        #aiScoreTooltip li { margin-bottom: 3px; color: #b0b0b0; }
     `;
     document.head.appendChild(style);
 
     /************************************
      * 2. CONFIGURATION & STATE
      ************************************/
-    const DEFAULT_AI_THRESHOLD  = 3.5;
+    const DEFAULT_AI_THRESHOLD  = 2.5;
     const DEFAULT_BOT_THRESHOLD = 2.9;
     const CONFIDENCE_MID_TIER   = 2.5;
     const CONFIDENCE_HIGH_TIER  = 5.0;
@@ -58,17 +165,29 @@
     ];
     const scamLinkRegex = /\.(live|life|shop|xyz|buzz|top|click|fun|site|online|store|blog|app|digital|network|cloud)\b/i;
     const MIN_WORD_COUNT_FOR_AI_DETECTION = 25;
+
+    /* DOM selectors covering both new Reddit (www) and old Reddit (old) */
     const CONTENT_SELECTORS = [
+        'shreddit-post',
+        'shreddit-comment',
+        'article',
         'div[data-testid="post-container"]',
         'div[data-testid="comment"]',
+        'div[slot="comment"]',
         'div.comment',
         'div.link'
     ];
-    const USERNAME_SELECTORS = 'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]';
+    const USERNAME_SELECTORS = [
+        'a[data-testid="post_author_link"]',
+        'a[data-click-id="user"]',
+        'a.author',
+        'a[href*="/user/"]'
+    ].join(', ');
 
     let botCount = 0;
     let detectedBots = [];
     let detectionIndex = 0;
+    let isNavigating = false;
 
     /************************************
      * 3. PERSISTENT SETTINGS via browser.storage.local
@@ -117,6 +236,116 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+
+    /**
+     * Extract text content from an element, traversing into shadow DOM if needed.
+     */
+    function getDeepTextContent(elem) {
+        if (!elem) return '';
+        let text = '';
+
+        /* If the element has a shadow root, gather text from it */
+        if (elem.shadowRoot) {
+            text += getDeepTextContent(elem.shadowRoot);
+        }
+
+        for (const child of elem.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) {
+                text += child.textContent;
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                /* Skip non-content elements – style/script text would pollute
+                   AI scoring (e.g. CSS injected by Dark Reader into shadow roots) */
+                const tag = child.tagName.toLowerCase();
+                if (tag === 'style' || tag === 'script' || tag === 'noscript') continue;
+                text += getDeepTextContent(child);
+            }
+        }
+        return text;
+    }
+
+    /**
+     * Extract username from a new Reddit element.
+     * New Reddit uses shreddit-post[author] and shreddit-comment[author] attributes,
+     * as well as various anchor patterns.
+     */
+    function extractUsername(elem) {
+        /* Try the author attribute on shreddit elements first */
+        const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
+        if ((tag === 'shreddit-post' || tag === 'shreddit-comment') && elem.hasAttribute('author')) {
+            return elem.getAttribute('author');
+        }
+
+        /* Try standard selectors */
+        const userElem = queryDeep(elem, USERNAME_SELECTORS);
+        if (userElem) {
+            const text = userElem.textContent.trim().replace(/^u\//, '');
+            if (text) return text;
+        }
+
+        /* Try data-author attribute */
+        if (elem.hasAttribute('data-author')) {
+            return elem.getAttribute('data-author');
+        }
+
+        /* Fallback: check ancestor shreddit elements for author attribute */
+        const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
+        if (shredditParent) {
+            return shredditParent.getAttribute('author');
+        }
+
+        /* Fallback: check shadow DOM host for author attribute */
+        const rootNode = elem.getRootNode();
+        if (rootNode && rootNode.host) {
+            const host = rootNode.host;
+            const hostTag = host.tagName ? host.tagName.toLowerCase() : '';
+            if ((hostTag === 'shreddit-post' || hostTag === 'shreddit-comment') && host.hasAttribute('author')) {
+                return host.getAttribute('author');
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * querySelector that also searches inside shadow roots.
+     */
+    function queryDeep(root, selector) {
+        let result = root.querySelector(selector);
+        if (result) return result;
+
+        if (root.shadowRoot) {
+            result = root.shadowRoot.querySelector(selector);
+            if (result) return result;
+        }
+
+        const children = root.querySelectorAll('*');
+        for (const child of children) {
+            if (child.shadowRoot) {
+                result = child.shadowRoot.querySelector(selector);
+                if (result) return result;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * querySelectorAll that also searches inside shadow roots.
+     */
+    function queryDeepAll(root, selector) {
+        const results = Array.from(root.querySelectorAll(selector));
+
+        if (root.shadowRoot) {
+            results.push(...root.shadowRoot.querySelectorAll(selector));
+        }
+
+        const children = root.querySelectorAll('*');
+        for (const child of children) {
+            if (child.shadowRoot) {
+                results.push(...child.shadowRoot.querySelectorAll(selector));
+            }
+        }
+        return results;
     }
 
     /************************************
@@ -295,6 +524,101 @@
             reasons.push("Structured List Pattern [+1.5]");
         }
 
+        // CHECK 14: Vocabulary diversity (Type-Token Ratio)
+        if (wordCount >= 50) {
+            const uniqueWords = new Set(words);
+            const ttr = uniqueWords.size / wordCount;
+            if (ttr < 0.4) {
+                score += 1.2;
+                reasons.push("Low Vocabulary Diversity [+1.2]");
+            } else if (ttr > 0.75) {
+                score -= 0.5;
+                reasons.push("High Vocabulary Diversity (Human-like) [-0.5]");
+            }
+        }
+
+        // CHECK 15: Repetitive sentence starters
+        if (sentencesArr.length >= 4) {
+            const starters = sentencesArr.map(s => {
+                const firstWord = s.trim().split(/\s+/)[0];
+                return firstWord ? firstWord.toLowerCase() : '';
+            }).filter(w => w.length > 0);
+            if (starters.length >= 3) {
+                const starterCounts = {};
+                starters.forEach(s => { starterCounts[s] = (starterCounts[s] || 0) + 1; });
+                const maxRepeat = Math.max(...Object.values(starterCounts));
+                const repeatRatio = maxRepeat / starters.length;
+                if (repeatRatio >= 0.5 && maxRepeat >= 3) {
+                    score += 1.5;
+                    reasons.push("Repetitive Sentence Starters [+1.5]");
+                }
+            }
+        }
+
+        // CHECK 16: Hedging / qualifying language density
+        const hedgingPhrases = [
+            "it depends", "it varies", "to some extent", "in some cases",
+            "it may", "it might", "it could", "it is possible",
+            "there are many", "there are several", "there are various",
+            "while it", "although it", "on one hand", "on the other",
+            "depending on", "this may vary", "results may vary",
+            "keep in mind", "bear in mind", "worth considering",
+            "it is worth mentioning", "it should be mentioned"
+        ];
+        const hedgingCount = hedgingPhrases.filter(phrase => lowerText.includes(phrase)).length;
+        if (hedgingCount >= 2) {
+            const points = Math.min(hedgingCount * 0.7, 2.8);
+            score += points;
+            reasons.push(`Hedging Language Density [+${points.toFixed(1)}]`);
+        }
+
+        // CHECK 17: Word-level entropy analysis
+        if (wordCount >= 40) {
+            const wordFreq = {};
+            words.forEach(w => { wordFreq[w] = (wordFreq[w] || 0) + 1; });
+            let entropy = 0;
+            const total = words.length;
+            Object.values(wordFreq).forEach(count => {
+                const p = count / total;
+                if (p > 0) entropy -= p * Math.log2(p);
+            });
+            const maxEntropy = Math.log2(total);
+            const normalizedEntropy = maxEntropy > 0 ? entropy / maxEntropy : 1;
+            if (normalizedEntropy < 0.75) {
+                score += 1.0;
+                reasons.push("Low Word Entropy [+1.0]");
+            }
+        }
+
+        // CHECK 18: Discourse connective overuse
+        const discourseConnectives = [
+            "however", "therefore", "thus", "hence", "consequently",
+            "additionally", "similarly", "specifically", "notably",
+            "accordingly", "meanwhile", "nonetheless", "conversely",
+            "subsequently", "alternatively", "likewise"
+        ];
+        let connectiveCount = 0;
+        discourseConnectives.forEach(conn => {
+            const regex = new RegExp('\\b' + conn + '\\b', 'gi');
+            const matches = lowerText.match(regex);
+            if (matches) connectiveCount += matches.length;
+        });
+        if (wordCount >= 40 && connectiveCount / wordCount > 0.02) {
+            const points = Math.min(connectiveCount * 0.5, 2.0);
+            score += points;
+            reasons.push(`Discourse Connective Overuse [+${points.toFixed(1)}]`);
+        }
+
+        // CHECK 19: Predictable paragraph structure (intro → body → conclusion)
+        if (paragraphCount >= 3 && wordCount >= 60) {
+            const hasIntroPattern = /^(in this|this (post|article|comment|response)|let me|i'?d like to|here('?s| is)|allow me)/i.test(text.trim());
+            const hasConclusionPattern = /(in conclusion|to summarize|overall|in summary|to sum up|all in all|in the end)\s/i.test(lowerText);
+            if (hasIntroPattern && hasConclusionPattern) {
+                score += 1.5;
+                reasons.push("Predictable Structure (Intro/Conclusion) [+1.5]");
+            }
+        }
+
         return { score: Math.max(0, score), reasons };
     }
 
@@ -308,22 +632,14 @@
 
     function computeBotScore(elem) {
         let score = 0;
-        let userElem = elem.querySelector(USERNAME_SELECTORS);
-        if (userElem) {
-            score += computeUsernameBotScore(userElem.textContent.trim());
-        } else {
-            /* Fallback: check shreddit parent author or data-author attribute */
-            let username = '';
-            const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
-            if (shredditParent) username = shredditParent.getAttribute('author');
-            if (!username && elem.hasAttribute('data-author')) {
-                username = elem.getAttribute('data-author');
-            }
-            if (username) score += computeUsernameBotScore(username);
+        const username = extractUsername(elem);
+        if (username) {
+            score += computeUsernameBotScore(username);
         }
-        const textContent = elem.textContent.toLowerCase().replace(/\s+/g, ' ').trim();
+        const textContent = getDeepTextContent(elem).toLowerCase().replace(/\s+/g, ' ').trim();
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
-        elem.querySelectorAll('a').forEach(link => {
+        const links = queryDeepAll(elem, 'a');
+        links.forEach(link => {
             if (scamLinkRegex.test(link.href)) score += 3.0;
         });
         return score;
@@ -337,7 +653,7 @@
         popup.id = "botCounterPopup";
         popup.innerHTML = `
             <div id="botPopupHeader">
-                <span>Detected bot/AI: 0</span>
+                <span>🔍 Detected bot/AI: 0</span>
                 <span id="settingsIcon" title="Settings">⚙️</span>
             </div>
             <div id="settingsPanel">
@@ -381,7 +697,7 @@
             const flaggedElem = e.target.closest('[data-bot-detected="true"]');
             if (flaggedElem) {
                 let aiReasons = [];
-                try { aiReasons = JSON.parse(flaggedElem.dataset.aiReasons || '[]'); } catch (e) { /* ignore corrupt data */ }
+                try { aiReasons = JSON.parse(flaggedElem.dataset.aiReasons || '[]'); } catch (_) { /* ignore corrupt data */ }
                 const reasonsHTML = aiReasons.map(r => `<li>${escapeHTML(String(r))}</li>`).join('');
                 const botScore = parseFloat(flaggedElem.dataset.botScore).toFixed(1);
                 const aiScore  = parseFloat(flaggedElem.dataset.aiScore).toFixed(1);
@@ -399,11 +715,15 @@
     }
 
     function updatePopup() {
-        document.querySelector("#botPopupHeader > span").textContent = `Detected bot/AI: ${botCount}`;
+        const headerSpan = document.querySelector("#botPopupHeader > span:first-child");
+        if (headerSpan) {
+            headerSpan.textContent = `🔍 Detected bot/AI: ${botCount}`;
+        }
         const dropdown = document.getElementById("botDropdown");
+        if (!dropdown) return;
         dropdown.innerHTML = "";
         if (detectedBots.length === 0) {
-            dropdown.innerHTML = `<span style="padding:3px 10px;color:#777;font-style:italic;">No bots/AI detected yet.</span>`;
+            dropdown.innerHTML = `<span style="padding:6px 14px;color:#777;font-style:italic;display:block;">No bots/AI detected yet.</span>`;
         } else {
             detectedBots
                 .slice()
@@ -415,7 +735,27 @@
                     link.title = `Bot Score: ${item.botScore.toFixed(1)}, AI Score: ${item.aiScore.toFixed(1)}`;
                     link.addEventListener('click', e => {
                         e.preventDefault();
-                        document.getElementById(item.elemID)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const targetElem = document.getElementById(item.elemID);
+                        if (targetElem) {
+                            /* Expand any collapsed parent comment threads */
+                            let parent = targetElem.parentElement;
+                            while (parent) {
+                                if (parent.tagName && parent.tagName.toLowerCase() === 'details' && !parent.open) {
+                                    parent.open = true;
+                                }
+                                const moreBtn = parent.querySelector('[id*="morechildren"], button[data-testid="comment-more-children"]');
+                                if (moreBtn) { try { moreBtn.click(); } catch (_) { /* ignore click errors */ } }
+                                parent = parent.parentElement;
+                            }
+                            targetElem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            /* Flash highlight to draw attention */
+                            targetElem.style.transition = 'box-shadow 0.3s ease-in-out';
+                            targetElem.style.boxShadow = '0 0 0 4px rgba(255, 69, 0, 0.7), 0 0 20px rgba(255, 69, 0, 0.4)';
+                            setTimeout(() => {
+                                targetElem.style.boxShadow = '';
+                                setTimeout(() => { targetElem.style.transition = ''; }, 300);
+                            }, 2000);
+                        }
                     });
                     dropdown.appendChild(link);
                 });
@@ -425,22 +765,88 @@
     /************************************
      * 7. CORE DETECTION LOGIC
      ************************************/
-    function highlightIfSuspected(elem) {
-        if (elem.getAttribute("data-bot-detected")) return;
+    function getTextToAnalyze(elem) {
+        const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
+        let textToAnalyze = '';
+        let paragraphCount = 0;
 
-        const commentBody = elem.querySelector('div[data-testid="comment"] > div:nth-child(2) > div');
-        let textToAnalyze = '', paragraphCount = 0;
-
-        if (commentBody && commentBody.querySelectorAll('p').length > 0) {
-            const paragraphs = Array.from(commentBody.querySelectorAll('p'));
-            textToAnalyze = paragraphs.map(p => p.textContent).join('\n\n');
-            paragraphCount = paragraphs.length;
+        /*
+         * New Reddit structures:
+         * - shreddit-comment: may have shadow DOM with comment body inside
+         * - shreddit-post: has post body text, sometimes in shadow root
+         * - Standard div containers with .md or .usertext-body
+         */
+        if (tag === 'shreddit-comment' || tag === 'shreddit-post') {
+            /* Try shadow root first */
+            if (elem.shadowRoot) {
+                const paras = elem.shadowRoot.querySelectorAll('p');
+                if (paras.length > 0) {
+                    textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                    paragraphCount = paras.length;
+                } else {
+                    textToAnalyze = getDeepTextContent(elem.shadowRoot);
+                    paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+                }
+            }
+            /* Also try slotted content / light DOM */
+            if (!textToAnalyze.trim()) {
+                const slotContent = elem.querySelector('[slot="comment"], [slot="text-body"], .md, .RichTextJSON-root');
+                if (slotContent) {
+                    const paras = slotContent.querySelectorAll('p');
+                    if (paras.length > 0) {
+                        textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                        paragraphCount = paras.length;
+                    } else {
+                        textToAnalyze = slotContent.textContent || '';
+                        paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+                    }
+                }
+            }
+            /* Fallback to deep text */
+            if (!textToAnalyze.trim()) {
+                textToAnalyze = getDeepTextContent(elem);
+                paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+            }
         } else {
-            const contentDiv = elem.querySelector('.md, .usertext-body');
-            textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
-            paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            /* Standard old Reddit-style containers */
+            const commentBody = elem.querySelector('div[data-testid="comment"] > div:nth-child(2) > div');
+            if (commentBody && commentBody.querySelectorAll('p').length > 0) {
+                const paragraphs = Array.from(commentBody.querySelectorAll('p'));
+                textToAnalyze = paragraphs.map(p => p.textContent).join('\n\n');
+                paragraphCount = paragraphs.length;
+            } else {
+                const contentDiv = elem.querySelector('.md, .usertext-body, .RichTextJSON-root');
+                textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
+                paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            }
         }
 
+        return { textToAnalyze, paragraphCount };
+    }
+
+    function highlightIfSuspected(elem) {
+        if (isNavigating) return;
+        if (elem.getAttribute("data-bot-detected")) return;
+
+        /* Skip elements that are inside a shreddit-post or shreddit-comment to
+           avoid duplicate detections – the parent shreddit element will be
+           scanned separately and carries the author attribute. */
+        const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
+        if (tag !== 'shreddit-post' && tag !== 'shreddit-comment') {
+            if (elem.closest('shreddit-post, shreddit-comment')) {
+                return;
+            }
+            /* Also skip if we are inside a shadow root hosted by a shreddit element */
+            const rootNode = elem.getRootNode();
+            if (rootNode && rootNode.host) {
+                const hostTag = rootNode.host.tagName ? rootNode.host.tagName.toLowerCase() : '';
+                if (hostTag === 'shreddit-post' || hostTag === 'shreddit-comment') {
+                    return;
+                }
+            }
+        }
+
+        const { textToAnalyze, paragraphCount } = getTextToAnalyze(elem);
         if (!textToAnalyze.trim()) return;
 
         const aiResult = computeAIScore(textToAnalyze, paragraphCount);
@@ -473,8 +879,11 @@
             }
 
             if (botFlag) {
-                const usernameElem = elem.querySelector(USERNAME_SELECTORS);
-                if (usernameElem) usernameElem.classList.add("botUsername");
+                /* For shreddit elements, try to style the username within the element */
+                const usernameElem = queryDeep(elem, USERNAME_SELECTORS);
+                if (usernameElem) {
+                    usernameElem.classList.add("botUsername");
+                }
             }
 
             elem.dataset.aiScore   = aiScore.toFixed(2);
@@ -486,15 +895,7 @@
             const generatedID = "reddeye-detected-" + detectionIndex;
             if (!elem.id) elem.setAttribute("id", generatedID);
             const elemID   = elem.id;
-            let username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || '';
-            if (!username) {
-                const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
-                if (shredditParent) username = shredditParent.getAttribute('author');
-            }
-            if (!username && elem.hasAttribute('data-author')) {
-                username = elem.getAttribute('data-author');
-            }
-            if (!username) username = "Unknown";
+            const username = extractUsername(elem) || "Unknown";
 
             detectedBots.push({ username, elemID, reason, botScore, aiScore });
             updatePopup();
@@ -502,7 +903,7 @@
     }
 
     /************************************
-     * 8. INITIALIZATION & OBSERVATION
+     * 8. SCANNING FUNCTIONS (New Reddit)
      ************************************/
     function debounce(fn, delay) {
         let timer;
@@ -512,11 +913,67 @@
     function scanForBots(root) {
         root = root || document;
         const query = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
-        root.querySelectorAll(query).forEach(highlightIfSuspected);
+        const candidates = root.querySelectorAll(query);
+        candidates.forEach(highlightIfSuspected);
+
+        /* Also look for shreddit elements with author attributes */
+        const shredditPosts = root.querySelectorAll('shreddit-post[author]:not([data-bot-detected])');
+        shredditPosts.forEach(highlightIfSuspected);
+        const shredditComments = root.querySelectorAll('shreddit-comment[author]:not([data-bot-detected])');
+        shredditComments.forEach(highlightIfSuspected);
+
+        /* Traverse shadow roots for nested content */
+        const allElements = root.querySelectorAll('*');
+        for (const el of allElements) {
+            if (el.shadowRoot && !el.getAttribute('data-reddeye-shadow-scanned')) {
+                el.setAttribute('data-reddeye-shadow-scanned', 'true');
+                scanForBots(el.shadowRoot);
+
+                /* Observe mutations within shadow roots */
+                const shadowObserver = new MutationObserver(mutations => {
+                    for (const mutation of mutations) {
+                        for (const node of mutation.addedNodes) {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                scheduleScan();
+                                return;
+                            }
+                        }
+                    }
+                });
+                shadowObserver.observe(el.shadowRoot, { childList: true, subtree: true });
+            }
+        }
     }
+
+    /**
+     * Performs a full-thread deep scan.
+     * Looks for "load more comments" / "continue thread" buttons
+     * and scans all currently loaded content across the page.
+     */
+    function fullThreadScan() {
+        /* Scan the full document body – not just visible viewport */
+        scanForBots(document.body);
+
+        /* Detect and scan inside iframes that Reddit may use for embedded content */
+        const iframes = document.querySelectorAll('iframe[src*="reddit.com"]');
+        iframes.forEach(iframe => {
+            try {
+                if (iframe.contentDocument && iframe.contentDocument.body) {
+                    scanForBots(iframe.contentDocument.body);
+                }
+            } catch (_) { /* cross-origin – ignore */ }
+        });
+    }
+
+    /************************************
+     * 9. INITIALIZATION & OBSERVATION
+     ************************************/
+    let scheduleScan;
+    let navigationTimer = null;
 
     /** Reset detection state and widget when Reddit SPA-navigates to a new page. */
     function resetDetectionState() {
+        isNavigating = true;
         botCount = 0;
         detectedBots = [];
         detectionIndex = 0;
@@ -528,6 +985,10 @@
             delete el.dataset.aiReasons;
         });
         document.querySelectorAll('.botUsername').forEach(el => el.classList.remove('botUsername'));
+        /* Also clear shadow-scanned markers so shadow roots are re-scanned */
+        document.querySelectorAll('[data-reddeye-shadow-scanned]').forEach(el => {
+            el.removeAttribute('data-reddeye-shadow-scanned');
+        });
         updatePopup();
     }
 
@@ -559,27 +1020,35 @@
 
     loadSettings(() => {
         createPopupAndTooltip();
-        setTimeout(() => scanForBots(document.body), 1500);
 
-        const scheduleScan = debounce(() => scanForBots(document.body), 100);
+        /* Initial full-thread scan after page settles */
+        setTimeout(() => fullThreadScan(), 1500);
+
+        scheduleScan = debounce(() => fullThreadScan(), 150);
+
+        /* Observe the entire document for new content (lazy-loaded comments, "load more", etc.) */
         const observer = new MutationObserver(mutations => {
-            for (const mutation of mutations) {
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        // Trigger one debounced full-page scan rather than per-node scans.
-                        // The debounce ensures all nodes added in rapid succession are
-                        // covered by the single scanForBots(document.body) call.
-                        scheduleScan();
-                        break;
-                    }
-                }
+            if (mutations.some(m => Array.from(m.addedNodes).some(n => n.nodeType === Node.ELEMENT_NODE))) {
+                scheduleScan();
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
 
+        /* Periodic re-scan to catch dynamically rendered content (e.g., virtual scrolling) */
+        const unscannedSelector = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
+        setInterval(() => {
+            if (document.querySelectorAll(unscannedSelector).length > 0) {
+                fullThreadScan();
+            }
+        }, 5000);
+
         monitorNavigation(() => {
             resetDetectionState();
-            setTimeout(() => scanForBots(document.body), 1500);
+            clearTimeout(navigationTimer);
+            navigationTimer = setTimeout(() => {
+                isNavigating = false;
+                fullThreadScan();
+            }, 1500);
         });
     });
 })();
