@@ -252,6 +252,10 @@
             if (child.nodeType === Node.TEXT_NODE) {
                 text += child.textContent;
             } else if (child.nodeType === Node.ELEMENT_NODE) {
+                /* Skip non-content elements – style/script text would pollute
+                   AI scoring (e.g. CSS injected by Dark Reader into shadow roots) */
+                const tag = child.tagName.toLowerCase();
+                if (tag === 'style' || tag === 'script' || tag === 'noscript') continue;
                 text += getDeepTextContent(child);
             }
         }
@@ -791,7 +795,7 @@
                         textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
                         paragraphCount = paras.length;
                     } else {
-                        textToAnalyze = slotContent.innerText || slotContent.textContent || '';
+                        textToAnalyze = slotContent.textContent || '';
                         paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
                     }
                 }
@@ -806,11 +810,11 @@
             const commentBody = elem.querySelector('div[data-testid="comment"] > div:nth-child(2) > div');
             if (commentBody && commentBody.querySelectorAll('p').length > 0) {
                 const paragraphs = Array.from(commentBody.querySelectorAll('p'));
-                textToAnalyze = paragraphs.map(p => p.innerText).join('\n\n');
+                textToAnalyze = paragraphs.map(p => p.textContent).join('\n\n');
                 paragraphCount = paragraphs.length;
             } else {
                 const contentDiv = elem.querySelector('.md, .usertext-body, .RichTextJSON-root');
-                textToAnalyze = contentDiv ? contentDiv.innerText : (elem.innerText || '');
+                textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
                 paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
             }
         }

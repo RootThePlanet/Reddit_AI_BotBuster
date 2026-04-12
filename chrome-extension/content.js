@@ -321,7 +321,7 @@
             }
             if (username) score += computeUsernameBotScore(username);
         }
-        const textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
+        const textContent = elem.textContent.toLowerCase().replace(/\s+/g, ' ').trim();
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
         elem.querySelectorAll('a').forEach(link => {
             if (scamLinkRegex.test(link.href)) score += 3.0;
@@ -433,11 +433,11 @@
 
         if (commentBody && commentBody.querySelectorAll('p').length > 0) {
             const paragraphs = Array.from(commentBody.querySelectorAll('p'));
-            textToAnalyze = paragraphs.map(p => p.innerText).join('\n\n');
+            textToAnalyze = paragraphs.map(p => p.textContent).join('\n\n');
             paragraphCount = paragraphs.length;
         } else {
             const contentDiv = elem.querySelector('.md, .usertext-body');
-            textToAnalyze = contentDiv ? contentDiv.innerText : (elem.innerText || '');
+            textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
             paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
         }
 
