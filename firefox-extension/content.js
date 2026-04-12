@@ -823,8 +823,8 @@
             const aiVal  = Math.max(0.1, parseFloat(aiThresholdInput.value) || DEFAULT_AI_THRESHOLD);
             const botVal = Math.max(0.1, parseFloat(botThresholdInput.value) || DEFAULT_BOT_THRESHOLD);
             saveSettings(aiVal, botVal);
-            e.target.innerText = "Saved!";
-            setTimeout(() => { e.target.innerText = "Save"; }, 1500);
+            saveSettingsBtn.innerText = "Saved!";
+            setTimeout(() => { saveSettingsBtn.innerText = "Save"; }, 1500);
         });
 
         document.body.addEventListener('mouseover', e => {
