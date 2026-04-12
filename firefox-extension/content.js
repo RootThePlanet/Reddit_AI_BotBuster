@@ -188,6 +188,7 @@
         'a.author',
         'a[href*="/user/"]',
         'a[href*="/u/"]',
+        /* New Reddit uses <span slot="authorName"> inside shreddit-comment shadow DOM */
         'span[slot="authorName"]'
     ].join(', ');
 
