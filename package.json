@@ -1,6 +1,6 @@
 {
   "name": "redd-eye",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "description": "Automated test suite for Redd-Eye detection logic",
   "scripts": {
     "test": "jest --coverage"
