@@ -166,22 +166,31 @@
     const scamLinkRegex = /\.(live|life|shop|xyz|buzz|top|click|fun|site|online|store|blog|app|digital|network|cloud)\b/i;
     const MIN_WORD_COUNT_FOR_AI_DETECTION = 25;
 
+    /* Detect which Reddit variant we are running on */
+    const isOldReddit = location.hostname === 'old.reddit.com';
+
     /* DOM selectors covering both new Reddit (www) and old Reddit (old) */
-    const CONTENT_SELECTORS = [
-        'shreddit-post',
-        'shreddit-comment',
-        'article',
-        'div[data-testid="post-container"]',
-        'div[data-testid="comment"]',
-        'div[slot="comment"]',
-        'div.comment',
-        'div.link'
-    ];
+    const CONTENT_SELECTORS = isOldReddit
+        ? [
+            'div.comment',
+            'div.link'
+          ]
+        : [
+            'shreddit-post',
+            'shreddit-comment',
+            'article',
+            'div[data-testid="post-container"]',
+            'div[data-testid="comment"]',
+            'div[slot="comment"]',
+            'div.comment',
+            'div.link'
+          ];
     const USERNAME_SELECTORS = [
         'a[data-testid="post_author_link"]',
         'a[data-click-id="user"]',
         'a.author',
-        'a[href*="/user/"]'
+        'a[href*="/user/"]',
+        'a[href*="/u/"]'
     ].join(', ');
 
     let botCount = 0;
@@ -265,27 +274,28 @@
     }
 
     /**
-     * Extract username from a new Reddit element.
-     * New Reddit uses shreddit-post[author] and shreddit-comment[author] attributes,
-     * as well as various anchor patterns.
+     * Extract username from a Reddit comment or post element.
+     * Handles both old Reddit (data-author attribute, a.author links) and
+     * new Reddit (shreddit-post[author], shreddit-comment[author], shadow DOM).
      */
     function extractUsername(elem) {
-        /* Try the author attribute on shreddit elements first */
+        /* On old Reddit, the data-author attribute on div.comment / div.link
+           is the most reliable source and should be checked first. */
+        if (elem.hasAttribute('data-author')) {
+            return elem.getAttribute('data-author');
+        }
+
+        /* Try the author attribute on shreddit elements (new Reddit) */
         const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
         if ((tag === 'shreddit-post' || tag === 'shreddit-comment') && elem.hasAttribute('author')) {
             return elem.getAttribute('author');
         }
 
-        /* Try standard selectors */
+        /* Try standard selectors (a.author for old Reddit, various for new Reddit) */
         const userElem = queryDeep(elem, USERNAME_SELECTORS);
         if (userElem) {
             const text = userElem.textContent.trim().replace(/^u\//, '');
             if (text) return text;
-        }
-
-        /* Try data-author attribute */
-        if (elem.hasAttribute('data-author')) {
-            return elem.getAttribute('data-author');
         }
 
         /* Fallback: check ancestor shreddit elements for author attribute */
@@ -636,9 +646,22 @@
         if (username) {
             score += computeUsernameBotScore(username);
         }
-        const textContent = getDeepTextContent(elem).toLowerCase().replace(/\s+/g, ' ').trim();
+        /*
+         * For old Reddit, scope text extraction to the direct .entry to avoid
+         * pulling in nested child-comment text.  On new Reddit, use the full
+         * shadow-DOM-aware helper.
+         */
+        let textContent;
+        if (isOldReddit) {
+            const entry = elem.querySelector(':scope > .entry');
+            textContent = (entry || elem).textContent.toLowerCase().replace(/\s+/g, ' ').trim();
+        } else {
+            textContent = getDeepTextContent(elem).toLowerCase().replace(/\s+/g, ' ').trim();
+        }
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
-        const links = queryDeepAll(elem, 'a');
+        const links = isOldReddit
+            ? Array.from(elem.querySelectorAll('a'))
+            : queryDeepAll(elem, 'a');
         links.forEach(link => {
             if (scamLinkRegex.test(link.href)) score += 3.0;
         });
@@ -770,13 +793,12 @@
         let textToAnalyze = '';
         let paragraphCount = 0;
 
-        /*
-         * New Reddit structures:
-         * - shreddit-comment: may have shadow DOM with comment body inside
-         * - shreddit-post: has post body text, sometimes in shadow root
-         * - Standard div containers with .md or .usertext-body
-         */
         if (tag === 'shreddit-comment' || tag === 'shreddit-post') {
+            /*
+             * New Reddit structures:
+             * - shreddit-comment: may have shadow DOM with comment body inside
+             * - shreddit-post: has post body text, sometimes in shadow root
+             */
             /* Try shadow root first */
             if (elem.shadowRoot) {
                 const paras = elem.shadowRoot.querySelectorAll('p');
@@ -807,8 +829,36 @@
                 textToAnalyze = getDeepTextContent(elem);
                 paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
             }
+        } else if (isOldReddit) {
+            /*
+             * Old Reddit structures:
+             * - div.comment: has .entry > form.usertext > .usertext-body > .md
+             * - div.link: has .entry > .usertext-body > .md (for self posts)
+             * Use > .entry to scope to the direct comment entry and avoid
+             * picking up text from nested child comments.
+             */
+            const entry = elem.querySelector(':scope > .entry');
+            if (entry) {
+                const contentDiv = entry.querySelector('.md, .usertext-body');
+                if (contentDiv) {
+                    const paras = contentDiv.querySelectorAll('p');
+                    if (paras.length > 0) {
+                        textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                        paragraphCount = paras.length;
+                    } else {
+                        textToAnalyze = contentDiv.textContent || '';
+                        paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+                    }
+                }
+            }
+            /* Fallback if entry structure not found */
+            if (!textToAnalyze.trim()) {
+                const contentDiv = elem.querySelector('.md, .usertext-body');
+                textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
+                paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            }
         } else {
-            /* Standard old Reddit-style containers */
+            /* www.reddit.com non-shreddit containers (data-testid based, etc.) */
             const commentBody = elem.querySelector('div[data-testid="comment"] > div:nth-child(2) > div');
             if (commentBody && commentBody.querySelectorAll('p').length > 0) {
                 const paragraphs = Array.from(commentBody.querySelectorAll('p'));
@@ -879,8 +929,10 @@
             }
 
             if (botFlag) {
-                /* For shreddit elements, try to style the username within the element */
-                const usernameElem = queryDeep(elem, USERNAME_SELECTORS);
+                /* Style the username link within the flagged element */
+                const usernameElem = isOldReddit
+                    ? elem.querySelector(USERNAME_SELECTORS)
+                    : queryDeep(elem, USERNAME_SELECTORS);
                 if (usernameElem) {
                     usernameElem.classList.add("botUsername");
                 }
@@ -903,7 +955,7 @@
     }
 
     /************************************
-     * 8. SCANNING FUNCTIONS (New Reddit)
+     * 8. SCANNING FUNCTIONS
      ************************************/
     function debounce(fn, delay) {
         let timer;
@@ -916,31 +968,33 @@
         const candidates = root.querySelectorAll(query);
         candidates.forEach(highlightIfSuspected);
 
-        /* Also look for shreddit elements with author attributes */
-        const shredditPosts = root.querySelectorAll('shreddit-post[author]:not([data-bot-detected])');
-        shredditPosts.forEach(highlightIfSuspected);
-        const shredditComments = root.querySelectorAll('shreddit-comment[author]:not([data-bot-detected])');
-        shredditComments.forEach(highlightIfSuspected);
+        if (!isOldReddit) {
+            /* Also look for shreddit elements with author attributes (new Reddit) */
+            const shredditPosts = root.querySelectorAll('shreddit-post[author]:not([data-bot-detected])');
+            shredditPosts.forEach(highlightIfSuspected);
+            const shredditComments = root.querySelectorAll('shreddit-comment[author]:not([data-bot-detected])');
+            shredditComments.forEach(highlightIfSuspected);
 
-        /* Traverse shadow roots for nested content */
-        const allElements = root.querySelectorAll('*');
-        for (const el of allElements) {
-            if (el.shadowRoot && !el.getAttribute('data-reddeye-shadow-scanned')) {
-                el.setAttribute('data-reddeye-shadow-scanned', 'true');
-                scanForBots(el.shadowRoot);
+            /* Traverse shadow roots for nested content (new Reddit only) */
+            const allElements = root.querySelectorAll('*');
+            for (const el of allElements) {
+                if (el.shadowRoot && !el.getAttribute('data-reddeye-shadow-scanned')) {
+                    el.setAttribute('data-reddeye-shadow-scanned', 'true');
+                    scanForBots(el.shadowRoot);
 
-                /* Observe mutations within shadow roots */
-                const shadowObserver = new MutationObserver(mutations => {
-                    for (const mutation of mutations) {
-                        for (const node of mutation.addedNodes) {
-                            if (node.nodeType === Node.ELEMENT_NODE) {
-                                scheduleScan();
-                                return;
+                    /* Observe mutations within shadow roots */
+                    const shadowObserver = new MutationObserver(mutations => {
+                        for (const mutation of mutations) {
+                            for (const node of mutation.addedNodes) {
+                                if (node.nodeType === Node.ELEMENT_NODE) {
+                                    scheduleScan();
+                                    return;
+                                }
                             }
                         }
-                    }
-                });
-                shadowObserver.observe(el.shadowRoot, { childList: true, subtree: true });
+                    });
+                    shadowObserver.observe(el.shadowRoot, { childList: true, subtree: true });
+                }
             }
         }
     }
@@ -985,10 +1039,12 @@
             delete el.dataset.aiReasons;
         });
         document.querySelectorAll('.botUsername').forEach(el => el.classList.remove('botUsername'));
-        /* Also clear shadow-scanned markers so shadow roots are re-scanned */
-        document.querySelectorAll('[data-reddeye-shadow-scanned]').forEach(el => {
-            el.removeAttribute('data-reddeye-shadow-scanned');
-        });
+        /* Clear shadow-scanned markers so shadow roots are re-scanned (new Reddit only) */
+        if (!isOldReddit) {
+            document.querySelectorAll('[data-reddeye-shadow-scanned]').forEach(el => {
+                el.removeAttribute('data-reddeye-shadow-scanned');
+            });
+        }
         updatePopup();
     }
 
