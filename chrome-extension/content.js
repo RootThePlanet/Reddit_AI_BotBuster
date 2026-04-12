@@ -516,8 +516,13 @@
 
     /**
      * Monitor SPA navigation.  Reddit uses History API pushState/replaceState
-     * to navigate without full page reloads.  We intercept those calls (plus
-     * popstate for Back/Forward) so we can reset and re-scan for every page.
+     * to navigate without full page reloads.
+     *
+     * Content scripts run in a separate JavaScript context from the page, so
+     * overriding history.pushState / replaceState here does NOT intercept
+     * calls made by the page's own code.  Instead we poll location.href on a
+     * short interval to reliably detect every SPA navigation.  The popstate
+     * listener provides immediate detection for Back / Forward actions.
      */
     function monitorNavigation(onNavigate) {
         let lastURL = location.href;
@@ -528,19 +533,11 @@
             }
         };
 
-        const origPushState = history.pushState.bind(history);
-        history.pushState = function(...args) {
-            origPushState(...args);
-            handleURLChange();
-        };
-
-        const origReplaceState = history.replaceState.bind(history);
-        history.replaceState = function(...args) {
-            origReplaceState(...args);
-            handleURLChange();
-        };
-
+        /* popstate fires on Back / Forward navigation */
         window.addEventListener('popstate', handleURLChange);
+
+        /* Poll for URL changes caused by pushState / replaceState */
+        setInterval(handleURLChange, 200);
     }
 
     loadSettings(() => {
