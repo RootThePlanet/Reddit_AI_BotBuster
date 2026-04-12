@@ -4,7 +4,7 @@
 
     🚨 Compatibility Notice
 
-    As of version 4.2.0, this extension is optimized for and fully functional on old.reddit.com. Functionality on the new Reddit design (www.reddit.com) is not guaranteed and may be unreliable. For the best experience, please use the extension with Old Reddit.
+    As of version 5.1.0, this extension fully supports both www.reddit.com (new Reddit) and old.reddit.com (old Reddit). Both Firefox and Chrome extensions include the same detection engine with all 19 heuristic checks.
 
 ## Core Features
 
@@ -83,7 +83,7 @@ The extension analyzes content using a multi-layered heuristic engine inspired b
 
 The detection thresholds for both AI and Bot scoring are configurable via the UI. The default values are:
 
-    AI Threshold: 3.5
+    AI Threshold: 2.5
     Bot Threshold: 2.9
 
 Your custom settings are saved in your browser's local storage and will persist across sessions.
