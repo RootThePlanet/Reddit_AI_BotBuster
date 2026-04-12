@@ -308,9 +308,20 @@
 
     function computeBotScore(elem) {
         let score = 0;
-        const userElem = elem.querySelector(USERNAME_SELECTORS);
+        let userElem = elem.querySelector(USERNAME_SELECTORS);
         if (userElem) {
             score += computeUsernameBotScore(userElem.textContent.trim());
+        } else {
+            /* Fallback: check shreddit parent author or data-author attribute */
+            let username = '';
+            if (elem.closest) {
+                const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
+                if (shredditParent) username = shredditParent.getAttribute('author');
+            }
+            if (!username && elem.hasAttribute && elem.hasAttribute('data-author')) {
+                username = elem.getAttribute('data-author');
+            }
+            if (username) score += computeUsernameBotScore(username);
         }
         const textContent = elem.innerText.toLowerCase().replace(/\s+/g, ' ').trim();
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
@@ -477,7 +488,15 @@
             const generatedID = "reddeye-detected-" + detectionIndex;
             if (!elem.id) elem.setAttribute("id", generatedID);
             const elemID   = elem.id;
-            const username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || "Unknown";
+            let username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || '';
+            if (!username && elem.closest) {
+                const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
+                if (shredditParent) username = shredditParent.getAttribute('author');
+            }
+            if (!username && elem.hasAttribute && elem.hasAttribute('data-author')) {
+                username = elem.getAttribute('data-author');
+            }
+            if (!username) username = "Unknown";
 
             detectedBots.push({ username, elemID, reason, botScore, aiScore });
             updatePopup();

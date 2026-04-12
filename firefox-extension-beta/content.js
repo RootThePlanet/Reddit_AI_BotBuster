@@ -282,6 +282,24 @@
             return elem.getAttribute('data-author');
         }
 
+        /* Fallback: check ancestor shreddit elements for author attribute */
+        if (elem.closest) {
+            const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
+            if (shredditParent) {
+                return shredditParent.getAttribute('author');
+            }
+        }
+
+        /* Fallback: check shadow DOM host for author attribute */
+        const rootNode = elem.getRootNode();
+        if (rootNode && rootNode.host) {
+            const host = rootNode.host;
+            const hostTag = host.tagName ? host.tagName.toLowerCase() : '';
+            if ((hostTag === 'shreddit-post' || hostTag === 'shreddit-comment') && host.hasAttribute('author')) {
+                return host.getAttribute('author');
+            }
+        }
+
         return '';
     }
 
@@ -805,6 +823,24 @@
     function highlightIfSuspected(elem) {
         if (isNavigating) return;
         if (elem.getAttribute("data-bot-detected")) return;
+
+        /* Skip elements that are inside a shreddit-post or shreddit-comment to
+           avoid duplicate detections – the parent shreddit element will be
+           scanned separately and carries the author attribute. */
+        const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
+        if (tag !== 'shreddit-post' && tag !== 'shreddit-comment') {
+            if (elem.closest && elem.closest('shreddit-post, shreddit-comment')) {
+                return;
+            }
+            /* Also skip if we are inside a shadow root hosted by a shreddit element */
+            const rootNode = elem.getRootNode();
+            if (rootNode && rootNode.host) {
+                const hostTag = rootNode.host.tagName ? rootNode.host.tagName.toLowerCase() : '';
+                if (hostTag === 'shreddit-post' || hostTag === 'shreddit-comment') {
+                    return;
+                }
+            }
+        }
 
         const { textToAnalyze, paragraphCount } = getTextToAnalyze(elem);
         if (!textToAnalyze.trim()) return;
