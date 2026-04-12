@@ -196,6 +196,8 @@
     let detectedBots = [];
     let detectionIndex = 0;
     let isNavigating = false;
+    const flaggedElements = new WeakSet();
+    let ui = null;
 
     /************************************
      * 3. PERSISTENT SETTINGS via chrome.storage.sync
@@ -237,13 +239,47 @@
         return 206.835 - 1.015 * (words.length / sentenceMatches.length) - 84.6 * (syllableCount / words.length);
     }
 
-    function escapeHTML(str) {
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+    function renderPopupCount(headerSpan, count) {
+        const strong = document.createElement('strong');
+        strong.textContent = String(count);
+        headerSpan.replaceChildren(
+            document.createTextNode('🛡️ Redd-Eye: '),
+            strong,
+            document.createTextNode(' detected')
+        );
+    }
+
+    function renderEmptyDropdown(dropdown) {
+        const emptyState = document.createElement('span');
+        emptyState.style.padding = '6px 14px';
+        emptyState.style.color = '#777';
+        emptyState.style.fontStyle = 'italic';
+        emptyState.style.display = 'block';
+        emptyState.textContent = 'No bots/AI detected yet.';
+        dropdown.replaceChildren(emptyState);
+    }
+
+    function renderTooltipContent(tooltip, botScore, aiScore, aiReasons) {
+        const botLabel = document.createElement('strong');
+        botLabel.textContent = 'Bot Score:';
+        const aiLabel = document.createElement('strong');
+        aiLabel.textContent = 'AI Score:';
+        const reasonList = document.createElement('ul');
+
+        tooltip.replaceChildren(
+            botLabel,
+            document.createTextNode(` ${botScore} / ${String(BOT_THRESHOLD)}`),
+            document.createElement('br'),
+            aiLabel,
+            document.createTextNode(` ${aiScore} / ${String(AI_THRESHOLD)}`),
+            reasonList
+        );
+
+        aiReasons.forEach(reason => {
+            const item = document.createElement('li');
+            item.textContent = String(reason);
+            reasonList.appendChild(item);
+        });
     }
 
     /**
@@ -711,59 +747,105 @@
     function createPopupAndTooltip() {
         const popup = document.createElement("div");
         popup.id = "botCounterPopup";
-        popup.innerHTML = `
-            <div id="botPopupHeader">
-                <span>🛡️ Redd-Eye: <strong>0</strong> detected</span>
-                <span id="settingsIcon" title="Settings">⚙</span>
-            </div>
-            <div id="settingsPanel">
-                <label>AI Threshold <input type="number" id="aiThresholdInput" step="0.1" min="0.1"></label>
-                <label>Bot Threshold <input type="number" id="botThresholdInput" step="0.1" min="0.1"></label>
-                <button id="saveSettingsBtn">Save</button>
-            </div>
-            <div id="botDropdown"></div>`;
+        const header = document.createElement('div');
+        header.id = 'botPopupHeader';
+        const headerSpan = document.createElement('span');
+        renderPopupCount(headerSpan, 0);
+        const settingsIcon = document.createElement('span');
+        settingsIcon.id = 'settingsIcon';
+        settingsIcon.title = 'Settings';
+        settingsIcon.textContent = '⚙';
+        header.append(headerSpan, settingsIcon);
+
+        const settingsPanel = document.createElement('div');
+        settingsPanel.id = 'settingsPanel';
+
+        const aiLabel = document.createElement('label');
+        aiLabel.append(document.createTextNode('AI Threshold '));
+        const aiThresholdInput = document.createElement('input');
+        aiThresholdInput.type = 'number';
+        aiThresholdInput.id = 'aiThresholdInput';
+        aiThresholdInput.step = '0.1';
+        aiThresholdInput.min = '0.1';
+        aiLabel.appendChild(aiThresholdInput);
+
+        const botLabel = document.createElement('label');
+        botLabel.append(document.createTextNode('Bot Threshold '));
+        const botThresholdInput = document.createElement('input');
+        botThresholdInput.type = 'number';
+        botThresholdInput.id = 'botThresholdInput';
+        botThresholdInput.step = '0.1';
+        botThresholdInput.min = '0.1';
+        botLabel.appendChild(botThresholdInput);
+
+        const saveSettingsBtn = document.createElement('button');
+        saveSettingsBtn.id = 'saveSettingsBtn';
+        saveSettingsBtn.textContent = 'Save';
+        settingsPanel.append(aiLabel, botLabel, saveSettingsBtn);
+
+        const dropdown = document.createElement('div');
+        dropdown.id = 'botDropdown';
+        popup.append(header, settingsPanel, dropdown);
         document.body.appendChild(popup);
-        document.getElementById("aiThresholdInput").value  = AI_THRESHOLD;
-        document.getElementById("botThresholdInput").value = BOT_THRESHOLD;
+        aiThresholdInput.value = AI_THRESHOLD;
+        botThresholdInput.value = BOT_THRESHOLD;
 
         const tooltip = document.createElement("div");
         tooltip.id = "aiScoreTooltip";
         document.body.appendChild(tooltip);
 
-        document.getElementById("botPopupHeader").addEventListener("click", e => {
-            if (e.target.id === "settingsIcon") {
+        ui = {
+            header,
+            headerSpan,
+            settingsIcon,
+            settingsPanel,
+            aiThresholdInput,
+            botThresholdInput,
+            saveSettingsBtn,
+            dropdown,
+            tooltip
+        };
+
+        header.addEventListener("click", e => {
+            if (e.target === settingsIcon) {
                 e.stopPropagation();
-                const panel = document.getElementById("settingsPanel");
-                panel.style.display = panel.style.display === "block" ? "none" : "block";
+                settingsPanel.style.display = settingsPanel.style.display === "block" ? "none" : "block";
             } else {
-                const dropdown = document.getElementById("botDropdown");
                 dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
                 if (dropdown.style.display === 'none') {
-                    document.getElementById('settingsPanel').style.display = 'none';
+                    settingsPanel.style.display = 'none';
                 }
             }
         });
 
-        document.getElementById("saveSettingsBtn").addEventListener("click", e => {
+        saveSettingsBtn.addEventListener("click", e => {
             e.stopPropagation();
-            const aiVal  = Math.max(0.1, parseFloat(document.getElementById("aiThresholdInput").value) || DEFAULT_AI_THRESHOLD);
-            const botVal = Math.max(0.1, parseFloat(document.getElementById("botThresholdInput").value) || DEFAULT_BOT_THRESHOLD);
+            const aiVal  = Math.max(0.1, parseFloat(aiThresholdInput.value) || DEFAULT_AI_THRESHOLD);
+            const botVal = Math.max(0.1, parseFloat(botThresholdInput.value) || DEFAULT_BOT_THRESHOLD);
             saveSettings(aiVal, botVal);
             e.target.innerText = "Saved!";
             setTimeout(() => { e.target.innerText = "Save"; }, 1500);
         });
 
         document.body.addEventListener('mouseover', e => {
-            const flaggedElem = e.target.closest('[data-bot-detected="true"]');
-            if (flaggedElem) {
-                let aiReasons = [];
-                try { aiReasons = JSON.parse(flaggedElem.dataset.aiReasons || '[]'); } catch (_) { /* ignore corrupt data */ }
-                const reasonsHTML = aiReasons.map(r => `<li>${escapeHTML(String(r))}</li>`).join('');
-                const botScore = parseFloat(flaggedElem.dataset.botScore).toFixed(1);
-                const aiScore  = parseFloat(flaggedElem.dataset.aiScore).toFixed(1);
-                tooltip.innerHTML = `<strong>Bot Score:</strong> ${escapeHTML(botScore)} / ${escapeHTML(String(BOT_THRESHOLD))}<br><strong>AI Score:</strong> ${escapeHTML(aiScore)} / ${escapeHTML(String(AI_THRESHOLD))}<ul>${reasonsHTML}</ul>`;
-                tooltip.style.display = 'block';
-            }
+            const flaggedElem = e.target instanceof Element
+                ? e.target.closest('[data-bot-detected="true"]')
+                : null;
+            if (!flaggedElem || !flaggedElements.has(flaggedElem)) return;
+
+            let aiReasons = [];
+            try {
+                const parsedReasons = JSON.parse(flaggedElem.dataset.aiReasons || '[]');
+                aiReasons = Array.isArray(parsedReasons) ? parsedReasons : [];
+            } catch (_) { /* ignore corrupt data */ }
+
+            const rawBotScore = parseFloat(flaggedElem.dataset.botScore);
+            const rawAiScore = parseFloat(flaggedElem.dataset.aiScore);
+            const botScore = Number.isFinite(rawBotScore) ? rawBotScore.toFixed(1) : 'N/A';
+            const aiScore  = Number.isFinite(rawAiScore) ? rawAiScore.toFixed(1) : 'N/A';
+
+            renderTooltipContent(tooltip, botScore, aiScore, aiReasons);
+            tooltip.style.display = 'block';
         });
         document.body.addEventListener('mouseout',  () => { tooltip.style.display = 'none'; });
         document.body.addEventListener('mousemove', e => {
@@ -775,15 +857,13 @@
     }
 
     function updatePopup() {
-        const headerSpan = document.querySelector("#botPopupHeader > span:first-child");
-        if (headerSpan) {
-            headerSpan.innerHTML = `🛡️ Redd-Eye: <strong>${botCount}</strong> detected`;
-        }
-        const dropdown = document.getElementById("botDropdown");
-        if (!dropdown) return;
-        dropdown.innerHTML = "";
+        if (!ui) return;
+
+        renderPopupCount(ui.headerSpan, botCount);
+        const dropdown = ui.dropdown;
+        dropdown.replaceChildren();
         if (detectedBots.length === 0) {
-            dropdown.innerHTML = `<span style="padding:6px 14px;color:#777;font-style:italic;display:block;">No bots/AI detected yet.</span>`;
+            renderEmptyDropdown(dropdown);
         } else {
             detectedBots
                 .slice()
@@ -1054,6 +1134,7 @@
             elem.dataset.aiScore   = aiScore.toFixed(2);
             elem.dataset.botScore  = botScore.toFixed(2);
             elem.dataset.aiReasons = JSON.stringify(aiResult.reasons);
+            flaggedElements.add(elem);
 
             botCount++;
             detectionIndex++;
@@ -1176,6 +1257,7 @@
             delete el.dataset.aiScore;
             delete el.dataset.botScore;
             delete el.dataset.aiReasons;
+            flaggedElements.delete(el);
         });
         document.querySelectorAll('.botUsername').forEach(el => el.classList.remove('botUsername'));
         /* Clear shadow-scanned and link-scanned markers so content is re-scanned (new Reddit only) */
