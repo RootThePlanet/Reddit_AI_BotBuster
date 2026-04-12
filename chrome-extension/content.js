@@ -1,6 +1,6 @@
 /*
  Redd-Eye WebExtension content script (Chrome).
- Version 4.2.0
+ Version 4.3.0
  */
 
 (function() {
@@ -17,20 +17,22 @@
         .aiContentMid  { outline: 3px dashed #0056b3 !important; outline-offset: -3px; }
         .aiContentHigh { outline: 3px solid  #00234d !important; outline-offset: -3px; }
 
-        #botCounterPopup { position: fixed; top: 40px; right: 10px; width: 280px; z-index: 9999; background-color: rgba(248,248,248,0.9); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); font-family: 'Verdana', sans-serif; font-size: 12px; border: 1px solid #ccc; user-select: none; }
-        #botPopupHeader { display: flex; justify-content: space-between; align-items: center; font-weight: bold; padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; }
-        #settingsIcon { cursor: pointer; font-size: 16px; margin-left: 10px; }
-        #settingsPanel { display: none; padding: 10px; border-top: 1px solid #eee; }
-        #settingsPanel label { display: block; margin: 5px 0; }
-        #settingsPanel input { width: 50px; margin-left: 10px; }
-        #saveSettingsBtn { background-color: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; margin-top: 10px; }
-        #saveSettingsBtn:hover { background-color: #0056b3; }
-        #botDropdown { display: none; max-height: 300px; overflow-y: auto; padding: 5px 0; }
-        #botDropdown a { display: block; padding: 3px 10px; text-decoration: none; color: #333; }
-        #botDropdown a:hover { background-color: rgba(0,0,0,0.08); }
-        #aiScoreTooltip { position: fixed; display: none; background: #222; color: #fff; border-radius: 5px; padding: 8px; font-size: 12px; z-index: 10000; max-width: 300px; pointer-events: none; }
-        #aiScoreTooltip ul { margin: 0; padding: 0 0 0 15px; }
-        #aiScoreTooltip li { margin-bottom: 3px; }
+        #botCounterPopup { position: fixed; bottom: 16px; right: 16px; width: 280px; z-index: 99999; background: rgba(18,18,22,0.85); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.06); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px; color: #e0e0e0; user-select: none; transition: opacity 0.25s ease, transform 0.25s ease; opacity: 0.75; }
+        #botCounterPopup:hover { opacity: 1 !important; transform: translateY(-2px); }
+        #botPopupHeader { display: flex; justify-content: space-between; align-items: center; font-weight: 600; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: pointer; font-size: 12px; }
+        #settingsIcon { cursor: pointer; font-size: 14px; opacity: 0.5; transition: opacity 0.2s ease; }
+        #settingsIcon:hover { opacity: 1; }
+        #settingsPanel { display: none; padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.06); background: rgba(0,0,0,0.15); }
+        #settingsPanel label { display: block; margin: 5px 0; font-size: 11px; color: #999; }
+        #settingsPanel input { width: 55px; margin-left: 8px; padding: 3px 6px; border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; background: rgba(255,255,255,0.06); color: #e0e0e0; font-size: 11px; }
+        #saveSettingsBtn { background: linear-gradient(135deg, #ff4500, #ff6a33); color: white; border: none; border-radius: 6px; padding: 5px 12px; cursor: pointer; margin-top: 6px; font-size: 11px; font-weight: 600; }
+        #saveSettingsBtn:hover { filter: brightness(1.1); }
+        #botDropdown { display: none; max-height: 220px; overflow-y: auto; padding: 2px 0; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
+        #botDropdown a { display: block; padding: 5px 14px; text-decoration: none; color: #b0b0b0; font-size: 11px; transition: background-color 0.15s ease, color 0.15s ease; }
+        #botDropdown a:hover { background-color: rgba(255,255,255,0.05); color: #fff; }
+        #aiScoreTooltip { position: fixed; display: none; background: rgba(12,12,16,0.95); color: #e8e8e8; border-radius: 10px; padding: 10px 12px; font-size: 11px; z-index: 100000; max-width: 300px; pointer-events: none; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #aiScoreTooltip ul { margin: 4px 0 0; padding: 0 0 0 16px; }
+        #aiScoreTooltip li { margin-bottom: 3px; color: #b0b0b0; }
     `;
     document.head.appendChild(style);
 
@@ -58,13 +60,11 @@
         "i agree", "right you are", "well spoken, you are", "perfectly said this is"
     ];
     const scamLinkRegex = /\.(live|life|shop|xyz|buzz|top|click|fun|site|online|store|blog|app|digital|network|cloud)\b/i;
-    const CONTENT_SELECTORS = [
-        'div[data-testid="post-container"]',
-        'div[data-testid="comment"]',
-        'div.comment',
-        'div.link'
-    ];
-    const USERNAME_SELECTORS = 'a[href*="/user/"], a[href*="/u/"], a.author, a[data-click-id="user"]';
+    const isOldReddit = location.hostname === 'old.reddit.com';
+    const CONTENT_SELECTORS = isOldReddit
+        ? ['div.comment', 'div.link']
+        : ['shreddit-post', 'shreddit-comment'];
+    const USERNAME_SELECTORS = 'a[href*="/user/"], a[href*="/u/"], a.author';
 
     let botCount = 0;
     let detectedBots = [];
@@ -308,20 +308,39 @@
 
     function computeBotScore(elem) {
         let score = 0;
-        let userElem = elem.querySelector(USERNAME_SELECTORS);
-        if (userElem) {
-            score += computeUsernameBotScore(userElem.textContent.trim());
-        } else {
-            /* Fallback: check shreddit parent author or data-author attribute */
-            let username = '';
+        const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
+
+        /* Extract username: try author attribute first (shreddit), then DOM selectors */
+        let username = '';
+        if ((tag === 'shreddit-post' || tag === 'shreddit-comment') && elem.hasAttribute('author')) {
+            username = elem.getAttribute('author');
+        } else if (elem.hasAttribute('data-author')) {
+            username = elem.getAttribute('data-author');
+        }
+        if (!username) {
+            const userElem = elem.querySelector(USERNAME_SELECTORS);
+            if (userElem) {
+                username = userElem.textContent.trim().replace(/^u\//, '');
+            }
+        }
+        if (!username) {
             const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
             if (shredditParent) username = shredditParent.getAttribute('author');
-            if (!username && elem.hasAttribute('data-author')) {
-                username = elem.getAttribute('data-author');
-            }
-            if (username) score += computeUsernameBotScore(username);
         }
-        const textContent = elem.textContent.toLowerCase().replace(/\s+/g, ' ').trim();
+        if (username) score += computeUsernameBotScore(username);
+
+        /* Extract text content, preferring slotted light DOM content for shreddit elements */
+        let textContent;
+        if (tag === 'shreddit-comment' || tag === 'shreddit-post') {
+            const slotContent = elem.querySelector('[slot="comment"], [slot="text-body"], .md');
+            textContent = slotContent ? slotContent.textContent : (elem.textContent || '');
+        } else if (isOldReddit) {
+            const entry = elem.querySelector(':scope > .entry');
+            textContent = (entry || elem).textContent;
+        } else {
+            textContent = elem.textContent || '';
+        }
+        textContent = textContent.toLowerCase().replace(/\s+/g, ' ').trim();
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
         elem.querySelectorAll('a').forEach(link => {
             if (scamLinkRegex.test(link.href)) score += 3.0;
@@ -337,8 +356,8 @@
         popup.id = "botCounterPopup";
         popup.innerHTML = `
             <div id="botPopupHeader">
-                <span>Detected bot/AI: 0</span>
-                <span id="settingsIcon" title="Settings">⚙️</span>
+                <span>🛡️ Redd-Eye: <strong>0</strong> detected</span>
+                <span id="settingsIcon" title="Settings">⚙</span>
             </div>
             <div id="settingsPanel">
                 <label>AI Threshold: <input type="number" id="aiThresholdInput" step="0.1" min="0.1"></label>
@@ -399,7 +418,10 @@
     }
 
     function updatePopup() {
-        document.querySelector("#botPopupHeader > span").textContent = `Detected bot/AI: ${botCount}`;
+        const headerSpan = document.querySelector("#botPopupHeader > span:first-child");
+        if (headerSpan) {
+            headerSpan.innerHTML = `🛡️ Redd-Eye: <strong>${botCount}</strong> detected`;
+        }
         const dropdown = document.getElementById("botDropdown");
         dropdown.innerHTML = "";
         if (detectedBots.length === 0) {
@@ -428,17 +450,72 @@
     function highlightIfSuspected(elem) {
         if (elem.getAttribute("data-bot-detected")) return;
 
-        const commentBody = elem.querySelector('div[data-testid="comment"] > div:nth-child(2) > div');
+        const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
+
+        /* Skip elements inside shreddit containers to avoid duplicate detections */
+        if (tag !== 'shreddit-post' && tag !== 'shreddit-comment') {
+            if (elem.closest('shreddit-post, shreddit-comment')) {
+                return;
+            }
+        }
+
         let textToAnalyze = '', paragraphCount = 0;
 
-        if (commentBody && commentBody.querySelectorAll('p').length > 0) {
-            const paragraphs = Array.from(commentBody.querySelectorAll('p'));
-            textToAnalyze = paragraphs.map(p => p.textContent).join('\n\n');
-            paragraphCount = paragraphs.length;
+        if (tag === 'shreddit-comment' || tag === 'shreddit-post') {
+            /* New Reddit: check light DOM (slotted content) first */
+            const slotContent = elem.querySelector('[slot="comment"], [slot="text-body"], .md, .RichTextJSON-root');
+            if (slotContent) {
+                const paras = slotContent.querySelectorAll('p');
+                if (paras.length > 0) {
+                    textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                    paragraphCount = paras.length;
+                } else {
+                    textToAnalyze = slotContent.textContent || '';
+                    paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+                }
+            }
+            /* Fallback to full element text */
+            if (!textToAnalyze.trim()) {
+                textToAnalyze = elem.textContent || '';
+                paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+            }
+        } else if (isOldReddit) {
+            /* Old Reddit: scope to direct entry */
+            const entry = elem.querySelector(':scope > .entry');
+            if (entry) {
+                const contentDiv = entry.querySelector('.md, .usertext-body');
+                if (contentDiv) {
+                    const paras = contentDiv.querySelectorAll('p');
+                    if (paras.length > 0) {
+                        textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                        paragraphCount = paras.length;
+                    } else {
+                        textToAnalyze = contentDiv.textContent || '';
+                        paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+                    }
+                }
+            }
+            if (!textToAnalyze.trim()) {
+                const contentDiv = elem.querySelector('.md, .usertext-body');
+                textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
+                paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            }
         } else {
-            const contentDiv = elem.querySelector('.md, .usertext-body');
-            textToAnalyze = contentDiv ? contentDiv.textContent : (elem.textContent || '');
-            paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            /* Non-shreddit new Reddit containers (fallback) */
+            const contentDiv = elem.querySelector('.md, .usertext-body, .RichTextJSON-root, [slot="text-body"], [slot="comment"]');
+            if (contentDiv) {
+                const paras = contentDiv.querySelectorAll('p');
+                if (paras.length > 0) {
+                    textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                    paragraphCount = paras.length;
+                } else {
+                    textToAnalyze = contentDiv.textContent || '';
+                    paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+                }
+            } else {
+                textToAnalyze = elem.textContent || '';
+                paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            }
         }
 
         if (!textToAnalyze.trim()) return;
@@ -486,13 +563,20 @@
             const generatedID = "reddeye-detected-" + detectionIndex;
             if (!elem.id) elem.setAttribute("id", generatedID);
             const elemID   = elem.id;
-            let username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || '';
+            /* Extract username using the same priority as computeBotScore */
+            let username = '';
+            if ((tag === 'shreddit-post' || tag === 'shreddit-comment') && elem.hasAttribute('author')) {
+                username = elem.getAttribute('author');
+            } else if (elem.hasAttribute('data-author')) {
+                username = elem.getAttribute('data-author');
+            }
+            if (!username) {
+                const userEl = elem.querySelector(USERNAME_SELECTORS);
+                if (userEl) username = userEl.textContent.trim().replace(/^u\//, '');
+            }
             if (!username) {
                 const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
                 if (shredditParent) username = shredditParent.getAttribute('author');
-            }
-            if (!username && elem.hasAttribute('data-author')) {
-                username = elem.getAttribute('data-author');
             }
             if (!username) username = "Unknown";
 
@@ -513,6 +597,24 @@
         root = root || document;
         const query = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
         root.querySelectorAll(query).forEach(highlightIfSuspected);
+
+        if (!isOldReddit) {
+            /* Also look for shreddit elements with author attributes (new Reddit) */
+            root.querySelectorAll('shreddit-post[author]:not([data-bot-detected])').forEach(highlightIfSuspected);
+            root.querySelectorAll('shreddit-comment[author]:not([data-bot-detected])').forEach(highlightIfSuspected);
+
+            /* Fallback: find user-profile links and walk UP to containers */
+            root.querySelectorAll('a[href*="/user/"]:not([data-reddeye-link-scanned])').forEach(link => {
+                link.setAttribute('data-reddeye-link-scanned', 'true');
+                const container = link.closest(
+                    'shreddit-post, shreddit-comment, article, ' +
+                    '[data-post-id], [data-comment-id], div.comment, div.link'
+                );
+                if (container && !container.getAttribute('data-bot-detected')) {
+                    highlightIfSuspected(container);
+                }
+            });
+        }
     }
 
     /** Reset detection state and widget when Reddit SPA-navigates to a new page. */
@@ -528,6 +630,11 @@
             delete el.dataset.aiReasons;
         });
         document.querySelectorAll('.botUsername').forEach(el => el.classList.remove('botUsername'));
+        if (!isOldReddit) {
+            document.querySelectorAll('[data-reddeye-link-scanned]').forEach(el => {
+                el.removeAttribute('data-reddeye-link-scanned');
+            });
+        }
         updatePopup();
     }
 
