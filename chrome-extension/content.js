@@ -314,11 +314,9 @@
         } else {
             /* Fallback: check shreddit parent author or data-author attribute */
             let username = '';
-            if (elem.closest) {
-                const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
-                if (shredditParent) username = shredditParent.getAttribute('author');
-            }
-            if (!username && elem.hasAttribute && elem.hasAttribute('data-author')) {
+            const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
+            if (shredditParent) username = shredditParent.getAttribute('author');
+            if (!username && elem.hasAttribute('data-author')) {
                 username = elem.getAttribute('data-author');
             }
             if (username) score += computeUsernameBotScore(username);
@@ -489,11 +487,11 @@
             if (!elem.id) elem.setAttribute("id", generatedID);
             const elemID   = elem.id;
             let username = elem.querySelector(USERNAME_SELECTORS)?.textContent.trim() || '';
-            if (!username && elem.closest) {
+            if (!username) {
                 const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
                 if (shredditParent) username = shredditParent.getAttribute('author');
             }
-            if (!username && elem.hasAttribute && elem.hasAttribute('data-author')) {
+            if (!username && elem.hasAttribute('data-author')) {
                 username = elem.getAttribute('data-author');
             }
             if (!username) username = "Unknown";

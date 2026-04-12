@@ -283,11 +283,9 @@
         }
 
         /* Fallback: check ancestor shreddit elements for author attribute */
-        if (elem.closest) {
-            const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
-            if (shredditParent) {
-                return shredditParent.getAttribute('author');
-            }
+        const shredditParent = elem.closest('shreddit-post[author], shreddit-comment[author]');
+        if (shredditParent) {
+            return shredditParent.getAttribute('author');
         }
 
         /* Fallback: check shadow DOM host for author attribute */
@@ -829,7 +827,7 @@
            scanned separately and carries the author attribute. */
         const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
         if (tag !== 'shreddit-post' && tag !== 'shreddit-comment') {
-            if (elem.closest && elem.closest('shreddit-post, shreddit-comment')) {
+            if (elem.closest('shreddit-post, shreddit-comment')) {
                 return;
             }
             /* Also skip if we are inside a shadow root hosted by a shreddit element */
