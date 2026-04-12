@@ -179,12 +179,16 @@
           ]
         : [
             'shreddit-post',
-            'shreddit-comment'
+            'shreddit-comment',
+            'article[data-testid]',
+            '[data-testid="post-container"]',
+            '[data-testid="comment"]'
           ];
     const USERNAME_SELECTORS = [
         'a.author',
         'a[href*="/user/"]',
-        'a[href*="/u/"]'
+        'a[href*="/u/"]',
+        'span[slot="authorName"]'
     ].join(', ');
 
     let botCount = 0;
@@ -262,6 +266,28 @@
                 const tag = child.tagName.toLowerCase();
                 if (tag === 'style' || tag === 'script' || tag === 'noscript') continue;
                 text += getDeepTextContent(child);
+            }
+        }
+        return text;
+    }
+
+    /**
+     * Extract text from the LIGHT DOM only (no shadow DOM traversal).
+     * This avoids pulling in UI chrome (buttons, vote counts, etc.)
+     * from shadow roots of shreddit web components.
+     */
+    function getLightDOMTextContent(elem) {
+        if (!elem) return '';
+        let text = '';
+        for (const child of elem.childNodes) {
+            if (child.nodeType === Node.TEXT_NODE) {
+                text += child.textContent;
+            } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const tag = child.tagName.toLowerCase();
+                if (tag === 'style' || tag === 'script' || tag === 'noscript') continue;
+                /* Don't descend into other shreddit components (nested comments) */
+                if (tag === 'shreddit-comment' || tag === 'shreddit-comment-tree') continue;
+                text += getLightDOMTextContent(child);
             }
         }
         return text;
@@ -642,15 +668,31 @@
         }
         /*
          * For old Reddit, scope text extraction to the direct .entry to avoid
-         * pulling in nested child-comment text.  On new Reddit, use the full
-         * shadow-DOM-aware helper.
+         * pulling in nested child-comment text.  On new Reddit, use light-DOM
+         * text to avoid shadow-DOM UI noise (vote counts, buttons, etc.).
          */
         let textContent;
         if (isOldReddit) {
             const entry = elem.querySelector(':scope > .entry');
             textContent = (entry || elem).textContent.toLowerCase().replace(/\s+/g, ' ').trim();
         } else {
-            textContent = getDeepTextContent(elem).toLowerCase().replace(/\s+/g, ' ').trim();
+            /* Try slot-based content first for clean text */
+            let slotContent = null;
+            for (const sel of NEW_REDDIT_CONTENT_SLOTS) {
+                slotContent = elem.querySelector(sel);
+                if (slotContent && slotContent.textContent.trim()) break;
+                slotContent = null;
+            }
+            if (slotContent) {
+                textContent = slotContent.textContent.toLowerCase().replace(/\s+/g, ' ').trim();
+            } else {
+                /* Use light DOM text to avoid shadow DOM UI noise */
+                textContent = getLightDOMTextContent(elem).toLowerCase().replace(/\s+/g, ' ').trim();
+                /* If light DOM is empty, try innerText as fallback */
+                if (!textContent) {
+                    textContent = (elem.innerText || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                }
+            }
         }
         if (genericResponses.includes(textContent) && textContent.length < 30) score += 1.5;
         const links = isOldReddit
@@ -782,6 +824,40 @@
     /************************************
      * 7. CORE DETECTION LOGIC
      ************************************/
+    /**
+     * Helper: extract paragraphs or raw text from a content container.
+     */
+    function extractFromContainer(container) {
+        const paras = container.querySelectorAll('p');
+        if (paras.length > 0) {
+            return {
+                text: Array.from(paras).map(p => p.textContent).join('\n\n'),
+                paragraphCount: paras.length
+            };
+        }
+        const raw = container.innerText || container.textContent || '';
+        return {
+            text: raw,
+            paragraphCount: raw.split(/\n\s*\n/).filter(l => l.trim().length > 10).length
+        };
+    }
+
+    /**
+     * New-Reddit slot-based content selectors, ordered by specificity.
+     * These target the slotted light-DOM content of shreddit web components.
+     */
+    const NEW_REDDIT_CONTENT_SLOTS = [
+        'div[slot="comment"]',
+        '[slot="comment"]',
+        'div[slot="text-body"]',
+        '[slot="text-body"]',
+        'div[slot="post-body"]',
+        '[slot="post-body"]',
+        '.md',
+        '.RichTextJSON-root',
+        '[data-click-id="text"]'
+    ];
+
     function getTextToAnalyze(elem) {
         const tag = elem.tagName ? elem.tagName.toLowerCase() : '';
         let textToAnalyze = '';
@@ -797,26 +873,64 @@
              * Shadow DOM often contains only UI chrome (buttons, icons, etc.)
              * whose text would pollute the analysis.
              */
-            const slotContent = elem.querySelector('[slot="comment"], [slot="text-body"], .md, .RichTextJSON-root');
-            if (slotContent) {
-                const paras = slotContent.querySelectorAll('p');
-                if (paras.length > 0) {
-                    textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
-                    paragraphCount = paras.length;
-                } else {
-                    textToAnalyze = slotContent.textContent || '';
-                    paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+
+            /* Strategy 1: Find slotted content containers in light DOM */
+            for (const sel of NEW_REDDIT_CONTENT_SLOTS) {
+                const slotContent = elem.querySelector(sel);
+                if (slotContent) {
+                    const result = extractFromContainer(slotContent);
+                    if (result.text.trim()) {
+                        textToAnalyze = result.text;
+                        paragraphCount = result.paragraphCount;
+                        break;
+                    }
                 }
             }
-            /* If light DOM had nothing, try shadow root */
+
+            /* Strategy 2: Use light-DOM-only text (avoids shadow DOM noise) */
+            if (!textToAnalyze.trim()) {
+                const lightText = getLightDOMTextContent(elem);
+                if (lightText.trim()) {
+                    textToAnalyze = lightText;
+                    paragraphCount = lightText.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+                }
+            }
+
+            /* Strategy 3: Try innerText which respects rendering (new Reddit) */
+            if (!textToAnalyze.trim()) {
+                /* innerText is rendering-aware and often cleaner than textContent */
+                const innerText = elem.innerText || '';
+                if (innerText.trim()) {
+                    textToAnalyze = innerText;
+                    paragraphCount = innerText.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
+                }
+            }
+
+            /* Strategy 4: Shadow root content-area paragraphs (filtered) */
             if (!textToAnalyze.trim() && elem.shadowRoot) {
-                const paras = elem.shadowRoot.querySelectorAll('p');
-                if (paras.length > 0) {
-                    textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
-                    paragraphCount = paras.length;
+                /* Look for content containers inside the shadow root,
+                   avoiding UI chrome like action bars and vote buttons */
+                const shadowContent = elem.shadowRoot.querySelector(
+                    '[id*="comment"], [id*="content"], [id*="body"], [class*="content"], [class*="body"], .md'
+                );
+                if (shadowContent) {
+                    const result = extractFromContainer(shadowContent);
+                    if (result.text.trim()) {
+                        textToAnalyze = result.text;
+                        paragraphCount = result.paragraphCount;
+                    }
+                }
+                /* Fallback: paragraphs in shadow root */
+                if (!textToAnalyze.trim()) {
+                    const paras = elem.shadowRoot.querySelectorAll('p');
+                    if (paras.length > 0) {
+                        textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
+                        paragraphCount = paras.length;
+                    }
                 }
             }
-            /* Last resort: deep text extraction across both trees */
+
+            /* Strategy 5 (last resort): deep text extraction across both trees */
             if (!textToAnalyze.trim()) {
                 textToAnalyze = getDeepTextContent(elem);
                 paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(l => l.trim().length > 10).length;
@@ -850,19 +964,21 @@
                 paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
             }
         } else if (!isOldReddit) {
-            /* www.reddit.com non-shreddit containers (fallback) */
-            const contentDiv = elem.querySelector('.md, .usertext-body, .RichTextJSON-root, [slot="text-body"], [slot="comment"]');
-            if (contentDiv) {
-                const paras = contentDiv.querySelectorAll('p');
-                if (paras.length > 0) {
-                    textToAnalyze = Array.from(paras).map(p => p.textContent).join('\n\n');
-                    paragraphCount = paras.length;
-                } else {
-                    textToAnalyze = contentDiv.textContent || '';
-                    paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
+            /* www.reddit.com non-shreddit containers (fallback for other element types) */
+            /* Try slot-based selectors first */
+            for (const sel of NEW_REDDIT_CONTENT_SLOTS) {
+                const contentDiv = elem.querySelector(sel);
+                if (contentDiv) {
+                    const result = extractFromContainer(contentDiv);
+                    if (result.text.trim()) {
+                        textToAnalyze = result.text;
+                        paragraphCount = result.paragraphCount;
+                        break;
+                    }
                 }
-            } else {
-                textToAnalyze = elem.textContent || '';
+            }
+            if (!textToAnalyze.trim()) {
+                textToAnalyze = elem.innerText || elem.textContent || '';
                 paragraphCount = textToAnalyze.split(/\n\s*\n/).filter(line => line.trim().length > 10).length;
             }
         }
@@ -971,6 +1087,13 @@
             const shredditComments = root.querySelectorAll('shreddit-comment[author]:not([data-bot-detected])');
             shredditComments.forEach(highlightIfSuspected);
 
+            /* Scan inside shreddit-comment-tree containers, which wrap comment lists */
+            const commentTrees = root.querySelectorAll('shreddit-comment-tree');
+            commentTrees.forEach(tree => {
+                const treeComments = tree.querySelectorAll('shreddit-comment:not([data-bot-detected])');
+                treeComments.forEach(highlightIfSuspected);
+            });
+
             /*
              * Fallback: find user-profile links and walk UP to the nearest
              * post/comment container.  This catches content even if Reddit
@@ -982,6 +1105,7 @@
                 const container = link.closest(
                     'shreddit-post, shreddit-comment, article, ' +
                     '[data-post-id], [data-comment-id], ' +
+                    '[data-testid="post-container"], [data-testid="comment"], ' +
                     'div.comment, div.link'
                 );
                 if (container && !container.getAttribute('data-bot-detected')) {
@@ -1094,8 +1218,11 @@
     loadSettings(() => {
         createPopupAndTooltip();
 
-        /* Initial full-thread scan after page settles */
-        setTimeout(() => fullThreadScan(), 1500);
+        /* Initial full-thread scan after page settles.
+         * Run an early scan at 500ms (catches pre-rendered content)
+         * and a follow-up at 2000ms (catches lazy-loaded/hydrated content). */
+        setTimeout(() => fullThreadScan(), 500);
+        setTimeout(() => fullThreadScan(), 2000);
 
         scheduleScan = debounce(() => fullThreadScan(), 150);
 
@@ -1110,10 +1237,16 @@
         /* Periodic re-scan to catch dynamically rendered content (e.g., virtual scrolling) */
         const unscannedSelector = CONTENT_SELECTORS.map(s => `${s}:not([data-bot-detected])`).join(', ');
         setInterval(() => {
-            if (document.querySelectorAll(unscannedSelector).length > 0) {
+            /* Also check for any shreddit elements that haven't been scanned */
+            const hasUnscanned = document.querySelectorAll(unscannedSelector).length > 0;
+            const hasShredditUnscanned = !isOldReddit && (
+                document.querySelectorAll('shreddit-comment:not([data-bot-detected])').length > 0 ||
+                document.querySelectorAll('shreddit-post:not([data-bot-detected])').length > 0
+            );
+            if (hasUnscanned || hasShredditUnscanned) {
                 fullThreadScan();
             }
-        }, 5000);
+        }, 3000);
 
         monitorNavigation(() => {
             resetDetectionState();
