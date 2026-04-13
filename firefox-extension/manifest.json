@@ -6,7 +6,11 @@
   "permissions": ["storage"],
   "browser_specific_settings": {
     "gecko": {
-      "id": "redd-eye@example.com"
+      "id": "redd-eye@roottheplanet",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "icons": {
