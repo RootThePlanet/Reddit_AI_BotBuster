@@ -921,8 +921,8 @@
             reasons.push('Image marked as AI-generated [+7.0]');
         }
 
-        const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:[\s-]?3)?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
-        const uniqueTools = new Set(toolMatches.map(t => t.replace(/\s+/g, ' ').trim()));
+        const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:[\s-]?[23])?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
+        const uniqueTools = new Set(toolMatches.map(t => t.replace(/[\s-]+/g, '').trim()));
         if (uniqueTools.size > 0) {
             const points = Math.min(uniqueTools.size * AI_IMAGE_TOOL_SCORE, AI_IMAGE_TOOL_SCORE_CAP);
             score += points;
