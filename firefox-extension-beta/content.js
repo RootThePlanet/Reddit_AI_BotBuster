@@ -876,21 +876,21 @@
         'midjourney.com', 'openart.ai', 'playgroundai.com', 'stability.ai'
     ];
     const AI_IMAGE_TOOL_PATTERNS = [
-        'midjourney',
-        'dall[\\s-]?e(?:[\\s-]?[23])?',
-        'stable diffusion',
-        'sdxl',
-        'flux',
-        'comfyui',
-        'automatic1111',
-        'invokeai',
-        'playground ai',
-        'leonardo ai',
-        'adobe firefly',
-        'imagen',
-        'chatgpt image'
+        '\\bmidjourney\\b',
+        '\\bdall[\\s-]?e(?:[\\s-]?[23])?\\b',
+        '\\bstable\\s+diffusion\\b',
+        '\\bsdxl\\b',
+        '\\bflux\\b',
+        '\\bcomfyui\\b',
+        '\\bautomatic1111\\b',
+        '\\binvokeai\\b',
+        '\\bplayground\\s+ai\\b',
+        '\\bleonardo\\s+ai\\b',
+        '\\badobe\\s+firefly\\b',
+        '\\bimagen\\b',
+        '\\bchatgpt\\s+image\\b'
     ];
-    const AI_IMAGE_TOOL_REGEX = new RegExp(`\\b(${AI_IMAGE_TOOL_PATTERNS.join('|')})\\b`, 'g');
+    const AI_IMAGE_TOOL_REGEX = new RegExp(`(${AI_IMAGE_TOOL_PATTERNS.join('|')})`, 'g');
 
     function getCandidateContentImages(elem) {
         const images = isOldReddit
@@ -939,7 +939,7 @@
 
         const toolMatches = lowerSignals.match(AI_IMAGE_TOOL_REGEX) || [];
         const uniqueTools = new Set(toolMatches.map(t => {
-            const normalized = t.replace(/[\s-]+/g, '').trim();
+            const normalized = t.replace(/[\s-]+/g, '');
             if (normalized.startsWith('dalle')) return 'dalle';
             return normalized;
         }));
@@ -954,8 +954,7 @@
             try {
                 const hostname = new URL(src, location.href).hostname.toLowerCase();
                 return AI_IMAGE_HOST_HINTS.some(hostHint => hostname === hostHint || hostname.endsWith(`.${hostHint}`));
-            } catch (err) {
-                void err;
+            } catch {
                 return false;
             }
         });
