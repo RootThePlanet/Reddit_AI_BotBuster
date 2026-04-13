@@ -872,8 +872,8 @@
      */
     const MAX_IMAGE_AI_SCORE = 10;
     const AI_IMAGE_HOST_HINTS = [
-        'midjourney', 'openart', 'lexica', 'civitai', 'playgroundai',
-        'mage.space', 'leonardo.ai', 'stability.ai', 'dreamstudio'
+        'midjourney.com', 'openart.ai', 'lexica.art', 'civitai.com', 'playgroundai.com',
+        'mage.space', 'leonardo.ai', 'stability.ai', 'dreamstudio.ai'
     ];
 
     function getCandidateContentImages(elem) {
@@ -922,7 +922,11 @@
         }
 
         const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:[\s-]?[23])?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
-        const uniqueTools = new Set(toolMatches.map(t => t.replace(/[\s-]+/g, '').trim()));
+        const uniqueTools = new Set(toolMatches.map(t => {
+            const normalized = t.toLowerCase().replace(/[\s-]+/g, '').trim();
+            if (normalized.startsWith('dalle')) return 'dalle';
+            return normalized;
+        }));
         if (uniqueTools.size > 0) {
             const points = Math.min(uniqueTools.size * AI_IMAGE_TOOL_SCORE, AI_IMAGE_TOOL_SCORE_CAP);
             score += points;
@@ -930,8 +934,13 @@
         }
 
         const hasAIImageHost = images.some(img => {
-            const src = (img.currentSrc || img.src || '').toLowerCase();
-            return AI_IMAGE_HOST_HINTS.some(hostHint => src.includes(hostHint));
+            const src = img.currentSrc || img.src || '';
+            try {
+                const hostname = new URL(src, location.href).hostname.toLowerCase();
+                return AI_IMAGE_HOST_HINTS.some(hostHint => hostname === hostHint || hostname.endsWith(`.${hostHint}`));
+            } catch (_) {
+                return false;
+            }
         });
         if (hasAIImageHost) {
             score += 1.8;
