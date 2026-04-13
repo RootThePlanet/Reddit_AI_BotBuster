@@ -864,6 +864,80 @@
         return { score: Math.max(0, score), reasons };
     }
 
+    function getCandidateContentImages(elem) {
+        const images = isOldReddit
+            ? Array.from(elem.querySelectorAll('img'))
+            : queryDeepAll(elem, 'img');
+
+        return images.filter(img => {
+            const src = img.currentSrc || img.src || '';
+            if (!src || src.startsWith('data:')) return false;
+
+            const alt = (img.alt || '').toLowerCase();
+            const title = (img.title || '').toLowerCase();
+            const combined = `${alt} ${title}`;
+            if (/(avatar|profile|community icon|emoji|award icon|icon)/.test(combined)) return false;
+
+            const width = img.naturalWidth || img.width || 0;
+            const height = img.naturalHeight || img.height || 0;
+            if (width > 0 && height > 0 && (width < 120 || height < 120)) return false;
+
+            return true;
+        });
+    }
+
+    function computeAIImageScore(elem, fallbackText) {
+        const reasons = [];
+        const images = getCandidateContentImages(elem);
+        if (images.length === 0) return { score: 0, reasons };
+
+        const signalParts = [];
+        if (fallbackText && fallbackText.trim()) signalParts.push(fallbackText);
+        images.forEach(img => {
+            signalParts.push(img.alt || '', img.title || '', img.currentSrc || img.src || '');
+            const figure = img.closest('figure');
+            if (figure) signalParts.push(figure.textContent || '');
+        });
+
+        const lowerSignals = signalParts.join(' ').toLowerCase();
+        if (!lowerSignals.trim()) return { score: 0, reasons };
+
+        let score = 0;
+
+        if (/\b(ai[-\s]?generated|generated (with|by) ai|made (with|by) ai|synthetic image|text[-\s]?to[-\s]?image)\b/.test(lowerSignals)) {
+            score += 7.0;
+            reasons.push('Image marked as AI-generated [+7.0]');
+        }
+
+        const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:\s?3)?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
+        const uniqueTools = new Set(toolMatches.map(t => t.replace(/\s+/g, ' ').trim()));
+        if (uniqueTools.size > 0) {
+            const points = Math.min(uniqueTools.size * 1.8, 4.5);
+            score += points;
+            reasons.push(`AI image tool markers [+${points.toFixed(1)}]`);
+        }
+
+        const hasAIImageHost = images.some(img => {
+            const src = (img.currentSrc || img.src || '').toLowerCase();
+            return /(midjourney|openart|lexica|civitai|playgroundai|mage\.space|leonardo\.ai|stability\.ai|dreamstudio)/.test(src);
+        });
+        if (hasAIImageHost) {
+            score += 1.8;
+            reasons.push('AI-image hosting URL pattern [+1.8]');
+        }
+
+        const hasGenerationParams = images.some(img => {
+            const src = (img.currentSrc || img.src || '').toLowerCase();
+            return /(prompt=|seed=|cfg(?:_scale)?=|steps=|sampler=|negative_prompt=)/.test(src);
+        });
+        if (hasGenerationParams) {
+            score += 1.5;
+            reasons.push('Image generation parameter pattern [+1.5]');
+        }
+
+        return { score: Math.max(0, Math.min(score, 10)), reasons };
+    }
+
     function computeUsernameBotScore(username) {
         let score = 0;
         suspiciousUserPatterns.forEach(pattern => { if (pattern.test(username)) score += 1.5; });
@@ -1265,11 +1339,17 @@
         }
 
         const { textToAnalyze, paragraphCount } = getTextToAnalyze(elem);
-        if (!textToAnalyze.trim()) return;
+        const trimmedText = textToAnalyze.trim();
 
-        const aiResult = computeAIScore(textToAnalyze, paragraphCount);
-        const aiScore  = aiResult.score;
+        const aiResult = trimmedText
+            ? computeAIScore(textToAnalyze, paragraphCount)
+            : { score: 0, reasons: [] };
+        const imageAiResult = computeAIImageScore(elem, textToAnalyze);
+        const aiScore  = aiResult.score + imageAiResult.score;
         const botScore = computeBotScore(elem);
+        const aiReasons = [...aiResult.reasons, ...imageAiResult.reasons];
+
+        if (!trimmedText && aiScore <= 0) return;
 
         const botFlag = botScore >= BOT_THRESHOLD;
         const aiFlag  = aiScore  >= AI_THRESHOLD;
@@ -1308,7 +1388,7 @@
 
             elem.dataset.aiScore   = aiScore.toFixed(2);
             elem.dataset.botScore  = botScore.toFixed(2);
-            elem.dataset.aiReasons = JSON.stringify(aiResult.reasons);
+            elem.dataset.aiReasons = JSON.stringify(aiReasons);
             flaggedElements.add(elem);
 
             botCount++;
