@@ -864,6 +864,117 @@
         return { score: Math.max(0, score), reasons };
     }
 
+    const AI_IMAGE_TOOL_SCORE = 1.8;
+    const AI_IMAGE_TOOL_SCORE_CAP = 4.5;
+    /*
+     * Keep image-only scoring on the same 0-10 scale used for strong text
+     * signals (e.g. self-disclosure returns 10), then combine with text score.
+     */
+    const MAX_IMAGE_AI_SCORE = 10;
+    const AI_IMAGE_HOST_HINTS = [
+        'civitai.com', 'dreamstudio.ai', 'leonardo.ai', 'lexica.art', 'mage.space',
+        'midjourney.com', 'openart.ai', 'playgroundai.com', 'stability.ai'
+    ];
+    const AI_IMAGE_TOOL_PATTERNS = [
+        '\\bmidjourney\\b',
+        '\\bdall[\\s-]?e(?:[\\s-]?[23])?\\b',
+        '\\bstable\\s+diffusion\\b',
+        '\\bsdxl\\b',
+        '\\bflux\\b',
+        '\\bcomfyui\\b',
+        '\\bautomatic1111\\b',
+        '\\binvokeai\\b',
+        '\\bplayground\\s+ai\\b',
+        '\\bleonardo\\s+ai\\b',
+        '\\badobe\\s+firefly\\b',
+        '\\bimagen\\b',
+        '\\bchatgpt\\s+image\\b'
+    ];
+    const AI_IMAGE_TOOL_REGEX = new RegExp(`(${AI_IMAGE_TOOL_PATTERNS.join('|')})`, 'g');
+
+    function getCandidateContentImages(elem) {
+        const images = isOldReddit
+            ? Array.from(elem.querySelectorAll('img'))
+            : queryDeepAll(elem, 'img');
+
+        return images.filter(img => {
+            const src = img.currentSrc || img.src || '';
+            if (!src || src.startsWith('data:')) return false;
+
+            const alt = (img.alt || '').toLowerCase();
+            const title = (img.title || '').toLowerCase();
+            const combined = `${alt} ${title}`;
+            if (/(avatar|profile|community icon|emoji|award icon|icon)/.test(combined)) return false;
+
+            const width = img.naturalWidth || img.width || 0;
+            const height = img.naturalHeight || img.height || 0;
+            if (width > 0 && height > 0 && (width < 120 || height < 120)) return false;
+
+            return true;
+        });
+    }
+
+    function computeAIImageScore(elem, fallbackText) {
+        const reasons = [];
+        const images = getCandidateContentImages(elem);
+        if (images.length === 0) return { score: 0, reasons };
+
+        const signalParts = [];
+        if (fallbackText && fallbackText.trim()) signalParts.push(fallbackText);
+        images.forEach(img => {
+            signalParts.push(img.alt || '', img.title || '', img.currentSrc || img.src || '');
+            const figure = img.closest('figure');
+            if (figure) signalParts.push(figure.textContent || '');
+        });
+
+        const lowerSignals = signalParts.join(' ').toLowerCase();
+        if (!lowerSignals.trim()) return { score: 0, reasons };
+
+        let score = 0;
+
+        if (/\b(ai[-\s]?generated|generated (with|by) ai|made (with|by) ai|synthetic image|text[-\s]?to[-\s]?image)\b/.test(lowerSignals)) {
+            score += 7.0;
+            reasons.push('Image marked as AI-generated [+7.0]');
+        }
+
+        const toolMatches = lowerSignals.match(AI_IMAGE_TOOL_REGEX) || [];
+        const uniqueTools = new Set(toolMatches.map(t => {
+            const normalized = t.replace(/[\s-]+/g, '');
+            if (normalized.startsWith('dalle')) return 'dalle';
+            return normalized;
+        }));
+        if (uniqueTools.size > 0) {
+            const points = Math.min(uniqueTools.size * AI_IMAGE_TOOL_SCORE, AI_IMAGE_TOOL_SCORE_CAP);
+            score += points;
+            reasons.push(`AI image tool markers [+${points.toFixed(1)}]`);
+        }
+
+        const hasAIImageHost = images.some(img => {
+            const src = img.currentSrc || img.src || '';
+            try {
+                const hostname = new URL(src, location.href).hostname.toLowerCase();
+                return AI_IMAGE_HOST_HINTS.some(hostHint => hostname === hostHint || hostname.endsWith(`.${hostHint}`));
+            } catch {
+                return false;
+            }
+        });
+        if (hasAIImageHost) {
+            score += 1.8;
+            reasons.push('AI-image hosting URL pattern [+1.8]');
+        }
+
+        const hasGenerationParams = images.some(img => {
+            const src = (img.currentSrc || img.src || '').toLowerCase();
+            return /(prompt=|seed=|cfg(?:_scale)?=|steps=|sampler=|negative_prompt=)/.test(src);
+        });
+        if (hasGenerationParams) {
+            score += 1.5;
+            reasons.push('Image generation parameter pattern [+1.5]');
+        }
+
+        return { score: Math.max(0, Math.min(score, MAX_IMAGE_AI_SCORE)), reasons };
+    }
+
     function computeUsernameBotScore(username) {
         let score = 0;
         suspiciousUserPatterns.forEach(pattern => { if (pattern.test(username)) score += 1.5; });
@@ -1265,11 +1376,17 @@
         }
 
         const { textToAnalyze, paragraphCount } = getTextToAnalyze(elem);
-        if (!textToAnalyze.trim()) return;
+        const trimmedText = textToAnalyze.trim();
 
-        const aiResult = computeAIScore(textToAnalyze, paragraphCount);
-        const aiScore  = aiResult.score;
+        const aiResult = trimmedText
+            ? computeAIScore(textToAnalyze, paragraphCount)
+            : { score: 0, reasons: [] };
+        const imageAiResult = computeAIImageScore(elem, textToAnalyze);
+        const aiScore  = aiResult.score + imageAiResult.score;
         const botScore = computeBotScore(elem);
+        const aiReasons = [...aiResult.reasons, ...imageAiResult.reasons];
+
+        if (!trimmedText && aiScore <= 0) return;
 
         const botFlag = botScore >= BOT_THRESHOLD;
         const aiFlag  = aiScore  >= AI_THRESHOLD;
@@ -1308,7 +1425,7 @@
 
             elem.dataset.aiScore   = aiScore.toFixed(2);
             elem.dataset.botScore  = botScore.toFixed(2);
-            elem.dataset.aiReasons = JSON.stringify(aiResult.reasons);
+            elem.dataset.aiReasons = JSON.stringify(aiReasons);
             flaggedElements.add(elem);
 
             botCount++;
