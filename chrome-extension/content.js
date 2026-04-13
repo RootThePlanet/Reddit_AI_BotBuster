@@ -686,6 +686,181 @@
             }
         }
 
+        // CHECK 20: Sentence Complexity Coefficient of Variation
+        // Modern LLMs exhibit "Perplexity Inversion": uniformly low complexity per
+        // sentence while simulating burstiness via varied sentence lengths. A low
+        // coefficient of variation in syllables-per-word across sentences signals
+        // machine-generated text.
+        if (sentencesArr.length >= 4) {
+            const sentenceComplexities = sentencesArr.map(s => {
+                const sWords = s.split(/\s+/).filter(w => w.length > 0);
+                if (sWords.length === 0) return 0;
+                const totalSyllables = sWords.reduce((acc, w) => acc + countSyllables(w), 0);
+                return totalSyllables / sWords.length;
+            }).filter(c => c > 0);
+            if (sentenceComplexities.length >= 4) {
+                const avgComplexity = sentenceComplexities.reduce((a, b) => a + b, 0) / sentenceComplexities.length;
+                if (avgComplexity > 0) {
+                    const complexityVariance = sentenceComplexities.reduce((a, b) => a + Math.pow(b - avgComplexity, 2), 0) / sentenceComplexities.length;
+                    const complexityStdDev = Math.sqrt(complexityVariance);
+                    const complexityCoV = complexityStdDev / avgComplexity;
+                    if (complexityCoV < 0.10) {
+                        score += 1.3;
+                        reasons.push("Low Complexity CoV (Perplexity Inversion) [+1.3]");
+                    }
+                }
+            }
+        }
+
+        // CHECK 21: AI Phrase Density
+        // Rather than only counting raw formulaic phrases, normalise against text
+        // length.  A high density of AI-characteristic phrases per 100 words is a
+        // stronger signal than raw count alone.
+        if (wordCount >= 40) {
+            const densityPhrases = [
+                "in conclusion", "furthermore", "moreover", "on the other hand",
+                "it is important to note", "ultimately", "in summary",
+                "it should be noted", "that being said", "needless to say",
+                "at the end of the day", "first and foremost", "last but not least",
+                "to summarize", "it goes without saying", "in today's world",
+                "hope this helps", "feel free to ask", "happy to help",
+                "it is crucial to", "it is essential to", "it is vital to",
+                "research suggests", "studies show", "it is well-known"
+            ];
+            let densityHits = 0;
+            densityPhrases.forEach(phrase => { if (lowerText.includes(phrase)) densityHits++; });
+            const phraseDensity = (densityHits / wordCount) * 100;
+            if (phraseDensity > 3.0) {
+                const points = Math.min(phraseDensity * 0.4, 2.5);
+                score += points;
+                reasons.push(`High AI Phrase Density [+${points.toFixed(1)}]`);
+            }
+        }
+
+        // CHECK 22: Hapax Legomena Ratio
+        // The ratio of words that appear exactly once (hapax legomena) to total
+        // unique words.  Human writing produces more unique, one-off word choices;
+        // AI tends to reuse vocabulary more systematically.
+        if (wordCount >= 50) {
+            const hapaxFreq = {};
+            words.forEach(w => { hapaxFreq[w] = (hapaxFreq[w] || 0) + 1; });
+            const uniqueWordCount = Object.keys(hapaxFreq).length;
+            const hapaxCount = Object.values(hapaxFreq).filter(c => c === 1).length;
+            if (uniqueWordCount > 0) {
+                const hapaxRatio = hapaxCount / uniqueWordCount;
+                if (hapaxRatio < 0.4) {
+                    score += 1.0;
+                    reasons.push("Low Hapax Legomena Ratio [+1.0]");
+                }
+            }
+        }
+
+        // CHECK 23: Function Word Distribution
+        // AI text exhibits unnaturally uniform distribution of common function
+        // words (articles, prepositions, auxiliaries).  We measure the standard
+        // deviation of their frequencies — very low deviation suggests generation.
+        if (wordCount >= 60) {
+            const functionWords = ['the', 'a', 'an', 'is', 'are', 'was', 'were', 'to', 'of', 'in', 'for', 'and', 'that', 'this', 'with', 'on', 'it', 'be', 'as', 'by'];
+            const fwCounts = functionWords.map(fw => {
+                let count = 0;
+                words.forEach(w => { if (w === fw) count++; });
+                return count;
+            });
+            const presentFW = fwCounts.filter(c => c > 0);
+            if (presentFW.length >= 5) {
+                const fwAvg = presentFW.reduce((a, b) => a + b, 0) / presentFW.length;
+                if (fwAvg > 0) {
+                    const fwVariance = presentFW.reduce((a, b) => a + Math.pow(b - fwAvg, 2), 0) / presentFW.length;
+                    const fwStdDev = Math.sqrt(fwVariance);
+                    const fwCoV = fwStdDev / fwAvg;
+                    if (fwCoV < 0.35) {
+                        score += 1.0;
+                        reasons.push("Uniform Function Word Distribution [+1.0]");
+                    }
+                }
+            }
+        }
+
+        // CHECK 24: Punctuation Pattern Regularity
+        // AI tends to use very regular punctuation — e.g. commas and periods at
+        // consistent rates across sentences.  We check the coefficient of
+        // variation of per-sentence punctuation counts.
+        if (sentencesArr.length >= 4) {
+            const punctPerSentence = sentencesArr.map(s => {
+                const punctMatches = s.match(/[,;:—\-()]/g);
+                return punctMatches ? punctMatches.length : 0;
+            });
+            const punctAvg = punctPerSentence.reduce((a, b) => a + b, 0) / punctPerSentence.length;
+            if (punctAvg > 0.5) {
+                const punctVariance = punctPerSentence.reduce((a, b) => a + Math.pow(b - punctAvg, 2), 0) / punctPerSentence.length;
+                const punctStdDev = Math.sqrt(punctVariance);
+                const punctCoV = punctStdDev / punctAvg;
+                if (punctCoV < 0.3) {
+                    score += 1.0;
+                    reasons.push("Regular Punctuation Patterns [+1.0]");
+                }
+            }
+        }
+
+        // CHECK 25: Average Word Length Consistency
+        // AI-generated text produces sentences with very consistent average word
+        // lengths.  Human text naturally varies more in word-length distribution
+        // across sentences.
+        if (sentencesArr.length >= 4) {
+            const sentenceAvgWordLengths = sentencesArr.map(s => {
+                const sWords = s.split(/\s+/).filter(w => w.length > 0);
+                if (sWords.length === 0) return 0;
+                return sWords.reduce((acc, w) => acc + w.length, 0) / sWords.length;
+            }).filter(l => l > 0);
+            if (sentenceAvgWordLengths.length >= 4) {
+                const avgWL = sentenceAvgWordLengths.reduce((a, b) => a + b, 0) / sentenceAvgWordLengths.length;
+                if (avgWL > 0) {
+                    const wlVariance = sentenceAvgWordLengths.reduce((a, b) => a + Math.pow(b - avgWL, 2), 0) / sentenceAvgWordLengths.length;
+                    const wlStdDev = Math.sqrt(wlVariance);
+                    const wlCoV = wlStdDev / avgWL;
+                    if (wlCoV < 0.08) {
+                        score += 1.2;
+                        reasons.push("Uniform Word Length Distribution [+1.2]");
+                    }
+                }
+            }
+        }
+
+        // CHECK 26: Semantic Coherence via Lexical Overlap
+        // AI-generated text maintains unnaturally consistent topic vocabulary
+        // across sentence pairs.  We measure average Jaccard similarity of
+        // content-word sets between consecutive sentences.
+        if (sentencesArr.length >= 4) {
+            const stopWords = new Set(['the','a','an','is','are','was','were','to','of','in','for','and','that','this','with','on','it','be','as','by','or','but','not','at','from','has','have','had','will','would','can','could','do','does','did','i','you','he','she','we','they','my','your','his','her','its','our','their','me','him','us','them','so','if','no','up','out','just','then','than','now','also','very','much','more','most','all','any','each','some','into','over','such','only','own','about','been','other','which','when','what','how','who','may','should','shall','must']);
+            const sentenceContentWords = sentencesArr.map(s => {
+                const sWords = s.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w.replace(/[^a-z]/g, '')));
+                return new Set(sWords.map(w => w.replace(/[^a-z]/g, '')).filter(w => w.length > 0));
+            }).filter(s => s.size > 0);
+            if (sentenceContentWords.length >= 3) {
+                let totalJaccard = 0;
+                let pairCount = 0;
+                for (let i = 0; i < sentenceContentWords.length - 1; i++) {
+                    const setA = sentenceContentWords[i];
+                    const setB = sentenceContentWords[i + 1];
+                    let intersection = 0;
+                    setA.forEach(w => { if (setB.has(w)) intersection++; });
+                    const union = setA.size + setB.size - intersection;
+                    if (union > 0) {
+                        totalJaccard += intersection / union;
+                        pairCount++;
+                    }
+                }
+                if (pairCount > 0) {
+                    const avgJaccard = totalJaccard / pairCount;
+                    if (avgJaccard > 0.35) {
+                        const points = Math.min((avgJaccard - 0.35) * 5, 2.0);
+                        score += points;
+                        reasons.push(`High Lexical Cohesion [+${points.toFixed(1)}]`);
+                    }
+                }
+            }
+        }
+
         return { score: Math.max(0, score), reasons };
     }
 
