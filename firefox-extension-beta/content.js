@@ -872,9 +872,25 @@
      */
     const MAX_IMAGE_AI_SCORE = 10;
     const AI_IMAGE_HOST_HINTS = [
-        'midjourney.com', 'openart.ai', 'lexica.art', 'civitai.com', 'playgroundai.com',
-        'mage.space', 'leonardo.ai', 'stability.ai', 'dreamstudio.ai'
+        'civitai.com', 'dreamstudio.ai', 'leonardo.ai', 'lexica.art', 'mage.space',
+        'midjourney.com', 'openart.ai', 'playgroundai.com', 'stability.ai'
     ];
+    const AI_IMAGE_TOOL_PATTERNS = [
+        'midjourney',
+        'dall[\\s-]?e(?:[\\s-]?[23])?',
+        'stable diffusion',
+        'sdxl',
+        'flux',
+        'comfyui',
+        'automatic1111',
+        'invokeai',
+        'playground ai',
+        'leonardo ai',
+        'adobe firefly',
+        'imagen',
+        'chatgpt image'
+    ];
+    const AI_IMAGE_TOOL_REGEX = new RegExp(`\\b(${AI_IMAGE_TOOL_PATTERNS.join('|')})\\b`, 'g');
 
     function getCandidateContentImages(elem) {
         const images = isOldReddit
@@ -921,9 +937,9 @@
             reasons.push('Image marked as AI-generated [+7.0]');
         }
 
-        const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:[\s-]?[23])?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
+        const toolMatches = lowerSignals.match(AI_IMAGE_TOOL_REGEX) || [];
         const uniqueTools = new Set(toolMatches.map(t => {
-            const normalized = t.toLowerCase().replace(/[\s-]+/g, '').trim();
+            const normalized = t.replace(/[\s-]+/g, '').trim();
             if (normalized.startsWith('dalle')) return 'dalle';
             return normalized;
         }));
@@ -938,7 +954,8 @@
             try {
                 const hostname = new URL(src, location.href).hostname.toLowerCase();
                 return AI_IMAGE_HOST_HINTS.some(hostHint => hostname === hostHint || hostname.endsWith(`.${hostHint}`));
-            } catch (_) {
+            } catch (err) {
+                void err;
                 return false;
             }
         });
