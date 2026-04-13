@@ -864,6 +864,18 @@
         return { score: Math.max(0, score), reasons };
     }
 
+    const AI_IMAGE_TOOL_SCORE = 1.8;
+    const AI_IMAGE_TOOL_SCORE_CAP = 4.5;
+    /*
+     * Keep image-only scoring on the same 0-10 scale used for strong text
+     * signals (e.g. self-disclosure returns 10), then combine with text score.
+     */
+    const MAX_IMAGE_AI_SCORE = 10;
+    const AI_IMAGE_HOST_HINTS = [
+        'midjourney', 'openart', 'lexica', 'civitai', 'playgroundai',
+        'mage.space', 'leonardo.ai', 'stability.ai', 'dreamstudio'
+    ];
+
     function getCandidateContentImages(elem) {
         const images = isOldReddit
             ? Array.from(elem.querySelectorAll('img'))
@@ -909,17 +921,17 @@
             reasons.push('Image marked as AI-generated [+7.0]');
         }
 
-        const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:\s?3)?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
+        const toolMatches = lowerSignals.match(/\b(midjourney|dall[\s-]?e(?:[\s-]?3)?|stable diffusion|sdxl|flux|comfyui|automatic1111|invokeai|playground ai|leonardo ai|adobe firefly|imagen|chatgpt image)\b/g) || [];
         const uniqueTools = new Set(toolMatches.map(t => t.replace(/\s+/g, ' ').trim()));
         if (uniqueTools.size > 0) {
-            const points = Math.min(uniqueTools.size * 1.8, 4.5);
+            const points = Math.min(uniqueTools.size * AI_IMAGE_TOOL_SCORE, AI_IMAGE_TOOL_SCORE_CAP);
             score += points;
             reasons.push(`AI image tool markers [+${points.toFixed(1)}]`);
         }
 
         const hasAIImageHost = images.some(img => {
             const src = (img.currentSrc || img.src || '').toLowerCase();
-            return /(midjourney|openart|lexica|civitai|playgroundai|mage\.space|leonardo\.ai|stability\.ai|dreamstudio)/.test(src);
+            return AI_IMAGE_HOST_HINTS.some(hostHint => src.includes(hostHint));
         });
         if (hasAIImageHost) {
             score += 1.8;
@@ -935,7 +947,7 @@
             reasons.push('Image generation parameter pattern [+1.5]');
         }
 
-        return { score: Math.max(0, Math.min(score, 10)), reasons };
+        return { score: Math.max(0, Math.min(score, MAX_IMAGE_AI_SCORE)), reasons };
     }
 
     function computeUsernameBotScore(username) {
