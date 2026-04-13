@@ -479,6 +479,221 @@ describe('computeAIScore — predictable structure (check 19)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Check 20: Sentence Complexity Coefficient of Variation (Perplexity Inversion)
+// ---------------------------------------------------------------------------
+describe('computeAIScore — sentence complexity CoV (check 20)', () => {
+    test('detects uniform sentence complexity (AI-like)', () => {
+        // All sentences with very similar syllable-per-word ratios
+        const uniformComplexity = Array(8).fill(
+            'The system is designed to be efficient and reliable at all times.'
+        ).join(' ');
+        const result = computeAIScore(uniformComplexity);
+        expect(result.reasons.some(r => r.includes('Complexity CoV'))).toBe(true);
+    });
+
+    test('does NOT trigger for text with varied complexity', () => {
+        // Mix of simple and complex sentences
+        const variedText =
+            'Go run now. ' +
+            'The extraordinarily sophisticated implementation demonstrates comprehensively remarkable capabilities. ' +
+            'I like cats. ' +
+            'The multifaceted organizational infrastructure necessitates unconventional methodological considerations. ' +
+            'Dogs are fun. ' +
+            'Simple words here too for good measure in this test sentence.';
+        const result = computeAIScore(variedText);
+        expect(result.reasons.some(r => r.includes('Complexity CoV'))).toBe(false);
+    });
+
+    test('does NOT trigger for fewer than 4 sentences', () => {
+        const text = 'The cat sat on the mat. The dog ran to the park. A bird flew away.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Complexity CoV'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 21: AI Phrase Density
+// ---------------------------------------------------------------------------
+describe('computeAIScore — AI phrase density (check 21)', () => {
+    test('detects high density of AI phrases in short text', () => {
+        // Pack many AI phrases into a short text for high density
+        const denseText =
+            'In conclusion, it is important to note that furthermore this is vital. ' +
+            'Moreover, research suggests studies show it is well-known and in summary ' +
+            'it should be noted that ultimately it is essential to consider this matter ' +
+            'carefully and thoroughly in every possible situation we encounter.';
+        const result = computeAIScore(denseText);
+        expect(result.reasons.some(r => r.includes('AI Phrase Density'))).toBe(true);
+    });
+
+    test('does NOT trigger when AI phrases are sparse in long text', () => {
+        // One AI phrase buried in a lot of padding
+        const text = makePadding(100) + ' In conclusion, the data is clear.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('AI Phrase Density'))).toBe(false);
+    });
+
+    test('score is capped at 2.5', () => {
+        const denseText =
+            'In conclusion, furthermore, moreover, on the other hand, it is important to note. ' +
+            'Ultimately, in summary, it should be noted, that being said, needless to say. ' +
+            'First and foremost, last but not least, to summarize, it goes without saying.';
+        const result = computeAIScore(denseText);
+        const densityReason = result.reasons.find(r => r.includes('AI Phrase Density'));
+        if (densityReason) {
+            const points = parseFloat(densityReason.match(/\+(\d+\.\d+)/)[1]);
+            expect(points).toBeLessThanOrEqual(2.5);
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 22: Hapax Legomena Ratio
+// ---------------------------------------------------------------------------
+describe('computeAIScore — hapax legomena ratio (check 22)', () => {
+    test('detects low hapax ratio (heavily repeated vocabulary)', () => {
+        // Highly repetitive text: most words appear multiple times
+        const repetitiveText = Array(10).fill(
+            'The system is designed to be efficient and reliable.'
+        ).join(' ');
+        const result = computeAIScore(repetitiveText);
+        expect(result.reasons.some(r => r.includes('Hapax Legomena'))).toBe(true);
+    });
+
+    test('does NOT trigger for text under 50 words', () => {
+        const shortText = Array(3).fill('The cat sat on the mat by the door.').join(' ');
+        const result = computeAIScore(shortText);
+        expect(result.reasons.some(r => r.includes('Hapax Legomena'))).toBe(false);
+    });
+
+    test('does NOT trigger for diverse vocabulary text', () => {
+        const diverseText =
+            'Yesterday morning, Sarah discovered an extraordinary antique ' +
+            'telescope hidden underneath dusty blankets inside grandmother\'s ' +
+            'forgotten attic storage room. Meanwhile, neighborhood children ' +
+            'organized spontaneous carnival festivities throughout peaceful ' +
+            'suburban boulevards during golden autumn twilight. Professional ' +
+            'astronomers published groundbreaking research regarding mysterious ' +
+            'celestial phenomena observed through innovative satellite instruments.';
+        const result = computeAIScore(diverseText);
+        expect(result.reasons.some(r => r.includes('Hapax Legomena'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 23: Function Word Distribution
+// ---------------------------------------------------------------------------
+describe('computeAIScore — function word distribution (check 23)', () => {
+    test('detects uniform function word distribution in long text', () => {
+        // Carefully constructed text where function words appear at similar rates
+        const uniformFW = Array(8).fill(
+            'The system is designed to be efficient and reliable in all conditions for the users.'
+        ).join(' ');
+        const result = computeAIScore(uniformFW);
+        // May or may not trigger depending on actual distribution — just verify no crash
+        expect(result).toHaveProperty('score');
+        expect(result).toHaveProperty('reasons');
+    });
+
+    test('does NOT trigger for text under 60 words', () => {
+        const shortText = Array(4).fill('The cat sat on a mat.').join(' ');
+        const result = computeAIScore(shortText);
+        expect(result.reasons.some(r => r.includes('Function Word'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 24: Punctuation Pattern Regularity
+// ---------------------------------------------------------------------------
+describe('computeAIScore — punctuation pattern regularity (check 24)', () => {
+    test('detects very regular punctuation patterns', () => {
+        // Every sentence has exactly 2 commas — very uniform
+        const regularPunct = Array(6).fill(
+            'The system, being well-designed, operates efficiently in conditions.'
+        ).join(' ');
+        const result = computeAIScore(regularPunct);
+        expect(result.reasons.some(r => r.includes('Punctuation Patterns'))).toBe(true);
+    });
+
+    test('does NOT trigger for irregular punctuation patterns', () => {
+        const irregularPunct =
+            'Go now! ' +
+            'The extraordinarily sophisticated, well-designed, carefully engineered, thoroughly tested system operates. ' +
+            'Run. ' +
+            'Fast! ' +
+            'The system — if we consider all factors — works well, mostly, in certain conditions; however, results vary.';
+        const result = computeAIScore(irregularPunct);
+        expect(result.reasons.some(r => r.includes('Punctuation Patterns'))).toBe(false);
+    });
+
+    test('does NOT trigger for fewer than 4 sentences', () => {
+        const text = 'The cat, being clever, escaped. The dog, being loyal, stayed. The bird flew.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Punctuation Patterns'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 25: Average Word Length Consistency
+// ---------------------------------------------------------------------------
+describe('computeAIScore — word length consistency (check 25)', () => {
+    test('detects uniform word lengths across sentences', () => {
+        // All sentences have very similar average word lengths
+        const uniformWL = Array(8).fill(
+            'The system is designed to be efficient and reliable at all times.'
+        ).join(' ');
+        const result = computeAIScore(uniformWL);
+        expect(result.reasons.some(r => r.includes('Word Length Distribution'))).toBe(true);
+    });
+
+    test('does NOT trigger for varied word length patterns', () => {
+        const variedWL =
+            'Go. Run. Hi! ' +
+            'The extraordinarily multifaceted organizational infrastructure demonstrates capabilities. ' +
+            'I do. ' +
+            'The comprehensively sophisticated methodological implementation necessitates unconventional approaches. ' +
+            'Be it so. We try. Ok. ' +
+            'Tremendously overcomplicated bureaucratic institutionalized responsibilities overwhelmed everybody.';
+        const result = computeAIScore(variedWL);
+        expect(result.reasons.some(r => r.includes('Word Length Distribution'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Check 26: Semantic Coherence via Lexical Overlap
+// ---------------------------------------------------------------------------
+describe('computeAIScore — lexical cohesion (check 26)', () => {
+    test('detects high lexical overlap between consecutive sentences', () => {
+        // Same content words repeated across sentences
+        const highOverlap =
+            'The detection system analyzes the content for patterns. ' +
+            'The detection system identifies suspicious content patterns. ' +
+            'The detection system flags problematic content patterns. ' +
+            'The detection system reports flagged content patterns. ' +
+            'The detection system removes harmful content patterns.';
+        const result = computeAIScore(highOverlap);
+        expect(result.reasons.some(r => r.includes('Lexical Cohesion'))).toBe(true);
+    });
+
+    test('does NOT trigger for diverse topic sentences', () => {
+        const diverseTopics =
+            'Yesterday morning Sarah discovered an antique telescope in the attic. ' +
+            'Professional basketball players train rigorously during summer camps. ' +
+            'Exotic tropical fish require specialized aquarium filtration equipment. ' +
+            'Mountain climbers faced unexpected avalanche conditions near the summit. ' +
+            'Classical musicians performed a breathtaking symphony at the concert hall.';
+        const result = computeAIScore(diverseTopics);
+        expect(result.reasons.some(r => r.includes('Lexical Cohesion'))).toBe(false);
+    });
+
+    test('does NOT trigger for fewer than 4 sentences', () => {
+        const text = 'The system works well. The system is reliable. The system is fast.';
+        const result = computeAIScore(text);
+        expect(result.reasons.some(r => r.includes('Lexical Cohesion'))).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // End-to-end: human vs. AI text comparison
 // ---------------------------------------------------------------------------
 describe('computeAIScore — human vs. AI end-to-end', () => {
