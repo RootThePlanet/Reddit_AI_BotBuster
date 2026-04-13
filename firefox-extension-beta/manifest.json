@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Redd-Eye",
+  "description": "Detect suspected bot accounts and AI-generated content on Reddit using advanced heuristics. Works on both www.reddit.com and old.reddit.com.",
+  "version": "5.1.0",
+  "permissions": ["storage"],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "redd-eye@roottheplanet",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "icons": {
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Redd-Eye",
+    "default_icon": {
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.reddit.com/*",
+        "*://old.reddit.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
