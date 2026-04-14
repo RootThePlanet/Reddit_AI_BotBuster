@@ -88,8 +88,5 @@ The detection thresholds for both AI and Bot scoring are configurable via the UI
 
 Your custom settings are saved in your browser's local storage and will persist across sessions.
 
-[![ai-detection-low-confidence.png](https://i.postimg.cc/YC4cBB4T/ai-detection-low-confidence.png)](https://postimg.cc/3kHf26FZ)
-[![bot-username-detection.png](https://i.postimg.cc/q7n9gcxL/bot-username-detection.png)](https://postimg.cc/HJYShyKc)
-[![configure-thresholds-options.png](https://i.postimg.cc/Cx93Frk5/configure-thresholds-options.png)](https://postimg.cc/NK7JD4Nv)
-[![detected-bots-and-ai.png](https://i.postimg.cc/gJW1hwMP/detected-bots-and-ai.png)](https://postimg.cc/FfTP5K5P)
+[![DCca2MLd-EX.png](https://i.postimg.cc/CLRcHP2z/DCca2MLd-EX.png)](https://postimg.cc/2VfdCwrD)
 
