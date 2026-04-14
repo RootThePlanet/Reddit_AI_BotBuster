@@ -19,8 +19,6 @@
 
         #botCounterPopup {
             position: fixed;
-            bottom: 16px;
-            right: 16px;
             width: 280px;
             z-index: 99999;
             background: rgba(18, 18, 22, 0.85);
@@ -151,8 +149,11 @@
     const CONFIDENCE_MID_TIER   = 2.5;
     const CONFIDENCE_HIGH_TIER  = 5.0;
 
+    const DEFAULT_WIDGET_POSITION = 'bottom-right';
+
     let AI_THRESHOLD  = DEFAULT_AI_THRESHOLD;
     let BOT_THRESHOLD = DEFAULT_BOT_THRESHOLD;
+    let WIDGET_POSITION = DEFAULT_WIDGET_POSITION;
 
     const suspiciousUserPatterns = [
         /bot/i,
@@ -203,10 +204,11 @@
      * 3. PERSISTENT SETTINGS via chrome.storage.sync
      ************************************/
     function loadSettings(callback) {
-        chrome.storage.sync.get({ ai_threshold: DEFAULT_AI_THRESHOLD, bot_threshold: DEFAULT_BOT_THRESHOLD })
+        chrome.storage.sync.get({ ai_threshold: DEFAULT_AI_THRESHOLD, bot_threshold: DEFAULT_BOT_THRESHOLD, widget_position: DEFAULT_WIDGET_POSITION })
             .then(result => {
                 AI_THRESHOLD  = result.ai_threshold;
                 BOT_THRESHOLD = result.bot_threshold;
+                WIDGET_POSITION = result.widget_position || DEFAULT_WIDGET_POSITION;
                 callback();
             })
             .catch(() => { callback(); });
@@ -216,6 +218,31 @@
         AI_THRESHOLD  = aiVal;
         BOT_THRESHOLD = botVal;
         chrome.storage.sync.set({ ai_threshold: aiVal, bot_threshold: botVal });
+    }
+
+    function applyWidgetPosition(popup, position) {
+        popup.style.top = '';
+        popup.style.bottom = '';
+        popup.style.left = '';
+        popup.style.right = '';
+        switch (position) {
+            case 'top-left':
+                popup.style.top = '16px';
+                popup.style.left = '16px';
+                break;
+            case 'top-right':
+                popup.style.top = '16px';
+                popup.style.right = '16px';
+                break;
+            case 'bottom-left':
+                popup.style.bottom = '16px';
+                popup.style.left = '16px';
+                break;
+            default: /* bottom-right */
+                popup.style.bottom = '16px';
+                popup.style.right = '16px';
+                break;
+        }
     }
 
     /************************************
@@ -962,6 +989,7 @@
         dropdown.id = 'botDropdown';
         popup.append(header, settingsPanel, dropdown);
         document.body.appendChild(popup);
+        applyWidgetPosition(popup, WIDGET_POSITION);
         aiThresholdInput.value = AI_THRESHOLD;
         botThresholdInput.value = BOT_THRESHOLD;
 
@@ -1475,6 +1503,24 @@
 
     loadSettings(() => {
         createPopupAndTooltip();
+
+        /* Listen for setting changes made via the popup */
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (area !== 'sync') return;
+            if (changes.ai_threshold) {
+                AI_THRESHOLD = changes.ai_threshold.newValue;
+                if (ui && ui.aiThresholdInput) ui.aiThresholdInput.value = AI_THRESHOLD;
+            }
+            if (changes.bot_threshold) {
+                BOT_THRESHOLD = changes.bot_threshold.newValue;
+                if (ui && ui.botThresholdInput) ui.botThresholdInput.value = BOT_THRESHOLD;
+            }
+            if (changes.widget_position) {
+                WIDGET_POSITION = changes.widget_position.newValue;
+                const popup = document.getElementById('botCounterPopup');
+                if (popup) applyWidgetPosition(popup, WIDGET_POSITION);
+            }
+        });
 
         /* Initial full-thread scan after page settles.
          * Run an early scan at 500ms (catches pre-rendered content)
