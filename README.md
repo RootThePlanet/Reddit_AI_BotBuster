@@ -1,21 +1,9 @@
- ███████████   ██████████ ██████████   ██████████              ██████████ █████ █████ ██████████
-░░███░░░░░███ ░░███░░░░░█░░███░░░░███ ░░███░░░░███            ░░███░░░░░█░░███ ░░███ ░░███░░░░░█
- ░███    ░███  ░███  █ ░  ░███   ░░███ ░███   ░░███            ░███  █ ░  ░░███ ███   ░███  █ ░ 
- ░██████████   ░██████    ░███    ░███ ░███    ░███ ██████████ ░██████     ░░█████    ░██████   
- ░███░░░░░███  ░███░░█    ░███    ░███ ░███    ░███░░░░░░░░░░  ░███░░█      ░░███     ░███░░█   
- ░███    ░███  ░███ ░   █ ░███    ███  ░███    ███             ░███ ░   █    ░███     ░███ ░   █
- █████   █████ ██████████ ██████████   ██████████              ██████████    █████    ██████████
-░░░░░   ░░░░░ ░░░░░░░░░░ ░░░░░░░░░░   ░░░░░░░░░░              ░░░░░░░░░░    ░░░░░    ░░░░░░░░░░ 
-                                                                                                
-                                                                                                
-                                                                                                
+# REDD-EYE
 
-#new-reddit-screenshot
-
+New Reddit Screenshot
 [![DCca2MLd-EX.png](https://i.postimg.cc/CLRcHP2z/DCca2MLd-EX.png)](https://postimg.cc/2VfdCwrD)
 
-#old-reddit-screenshot
-
+Old Reddit Screenshot
 [![screenshot-2.png](https://i.postimg.cc/Kv951dDK/screenshot-2.png)](https://postimg.cc/JGkXgYgm)
 
 ## Redd-Eye is an advanced browser extension (Firefox & Chrome) that detects potential AI-generated content and bot accounts on Reddit, providing a transparent, configurable, and powerful set of tools to help you identify inauthentic content as you browse.
