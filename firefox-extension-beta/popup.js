@@ -5,6 +5,8 @@
   const DEFAULT_AI_THRESHOLD  = 2.5;
   const DEFAULT_BOT_THRESHOLD = 2.9;
   const DEFAULT_POSITION      = 'bottom-right';
+  const MIN_THRESHOLD         = 0.5;
+  const MAX_THRESHOLD         = 10;
 
   const aiSlider   = document.getElementById('aiThreshold');
   const botSlider  = document.getElementById('botThreshold');
@@ -64,8 +66,8 @@
 
   /* ── Save ────────────────────────────── */
   saveBtn.addEventListener('click', () => {
-    const aiVal  = Math.max(0.5, Math.min(10, parseFloat(aiSlider.value) || DEFAULT_AI_THRESHOLD));
-    const botVal = Math.max(0.5, Math.min(10, parseFloat(botSlider.value) || DEFAULT_BOT_THRESHOLD));
+    const aiVal  = Math.max(MIN_THRESHOLD, Math.min(MAX_THRESHOLD, parseFloat(aiSlider.value) || DEFAULT_AI_THRESHOLD));
+    const botVal = Math.max(MIN_THRESHOLD, Math.min(MAX_THRESHOLD, parseFloat(botSlider.value) || DEFAULT_BOT_THRESHOLD));
 
     browser.storage.local.set({
       ai_threshold: aiVal,
