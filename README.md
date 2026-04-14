@@ -24,7 +24,7 @@ Redd-Eye is a browser extension for Reddit that flags content likely to be AI-ge
 Redd-Eye combines AI-writing heuristics and bot-account heuristics in one pass:
 
 - **AI-content detection:** Scores writing style signals such as low burstiness, over-formal phrasing, repetitive linguistic patterns, and other statistical cues common in generated text.
-- **Bot-account detection:** Checks username and behavior-linked indicators (for example suspicious naming patterns and spam-adjacent linking patterns).
+- **Bot-account detection:** Checks username and behavior-linked indicators (for example, suspicious naming patterns and spam-adjacent linking patterns).
 - **On-page visual warnings:** Adds confidence-based highlights so suspicious content stands out while you scroll.
 - **Detailed reasoning on hover:** Hovering flagged content reveals score breakdowns and triggered checks.
 - **Configurable sensitivity:** You can tune AI and bot thresholds from the extension UI to fit stricter or looser filtering.
@@ -39,14 +39,14 @@ Redd-Eye combines AI-writing heuristics and bot-account heuristics in one pass:
 
 ## Installation
 
-## 1) Clone the repository
+### 1) Clone the repository
 
 ```bash
 git clone https://github.com/RootThePlanet/Redd-Eye.git
 cd Redd-Eye
 ```
 
-## 2) Install in Chrome (unpacked)
+### 2) Install in Chrome (unpacked)
 
 1. Open `chrome://extensions`.
 2. Turn on **Developer mode**.
@@ -54,7 +54,7 @@ cd Redd-Eye
 4. Select: `chrome-extension/`
 5. Open Reddit and start browsing; Redd-Eye activates on supported Reddit pages.
 
-## 3) Install in Firefox (temporary load)
+### 3) Install in Firefox (temporary load)
 
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on**.
@@ -63,7 +63,7 @@ cd Redd-Eye
 
 > Temporary Firefox installs are removed when Firefox restarts. For distribution builds, package/sign with Mozilla tooling.
 
-## Optional: Build a Firefox package
+### Optional: Build a Firefox package
 
 ```bash
 npm install --global web-ext
