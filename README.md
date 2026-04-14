@@ -1,98 +1,88 @@
 # REDD-EYE
 
-New Reddit Screenshot
+```text
+██████╗ ███████╗██████╗ ██████╗       ███████╗██╗   ██╗███████╗
+██╔══██╗██╔════╝██╔══██╗██╔══██╗      ██╔════╝╚██╗ ██╔╝██╔════╝
+██████╔╝█████╗  ██║  ██║██║  ██║█████╗█████╗   ╚████╔╝ █████╗
+██╔══██╗██╔══╝  ██║  ██║██║  ██║╚════╝██╔══╝    ╚██╔╝  ██╔══╝
+██║  ██║███████╗██████╔╝██████╔╝      ███████╗   ██║   ███████╗
+╚═╝  ╚═╝╚══════╝╚═════╝ ╚═════╝       ╚══════╝   ╚═╝   ╚══════╝
+```
+
+![Manifest V3](https://img.shields.io/badge/manifest-v3-0A84FF?style=for-the-badge)
+![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white)
+![Firefox Add-on](https://img.shields.io/badge/Firefox-Add--on-FF7139?style=for-the-badge&logo=firefoxbrowser&logoColor=white)
+![License MIT](https://img.shields.io/badge/license-MIT-7CB342?style=for-the-badge)
+![Store Listings Incoming](https://img.shields.io/badge/Store%20Listings-Incoming-6f42c1?style=for-the-badge)
+
+Redd-Eye is a browser extension for Reddit that flags content likely to be AI-generated and highlights accounts that match common bot behavior patterns. It runs while you browse, scans posts/comments in real time, and gives you transparent score-based indicators so you can quickly judge credibility.
+
+> Chrome Web Store and Firefox Add-ons store listings are **incoming**. Until then, use local developer installation.
+
+## What Redd-Eye Does
+
+Redd-Eye combines AI-writing heuristics and bot-account heuristics in one pass:
+
+- **AI-content detection:** Scores writing style signals such as low burstiness, over-formal phrasing, repetitive linguistic patterns, and other statistical cues common in generated text.
+- **Bot-account detection:** Checks username and behavior-linked indicators (for example suspicious naming patterns and spam-adjacent linking patterns).
+- **On-page visual warnings:** Adds confidence-based highlights so suspicious content stands out while you scroll.
+- **Detailed reasoning on hover:** Hovering flagged content reveals score breakdowns and triggered checks.
+- **Configurable sensitivity:** You can tune AI and bot thresholds from the extension UI to fit stricter or looser filtering.
+
+## Screenshots
+
+### New Reddit Screenshot
 [![DCca2MLd-EX.png](https://i.postimg.cc/CLRcHP2z/DCca2MLd-EX.png)](https://postimg.cc/2VfdCwrD)
 
-Old Reddit Screenshot
+### Old Reddit Screenshot
 [![screenshot-2.png](https://i.postimg.cc/Kv951dDK/screenshot-2.png)](https://postimg.cc/JGkXgYgm)
-
-## Redd-Eye is an advanced browser extension (Firefox & Chrome) that detects potential AI-generated content and bot accounts on Reddit, providing a transparent, configurable, and powerful set of tools to help you identify inauthentic content as you browse.
-
-    🚨 Compatibility Notice
-
-    As of version 5.1.0, this extension fully supports both www.reddit.com (new Reddit) and old.reddit.com (old Reddit). Both Firefox and Chrome extensions include the same detection engine with all 19 heuristic checks.
-
-## Core Features
-
-    -Real-Time Scanning: Uses an efficient MutationObserver to scan posts and comments as they appear on the page, including with infinite scroll.
-    -Confidence-Based Highlighting: AI-generated content is highlighted with different outlines based on the detection confidence score, allowing you to see at a glance what's "possibly AI" versus "very likely AI."
-    -On-Hover Score Breakdown: Hover over any highlighted comment to see a detailed tooltip explaining why it was flagged, including which heuristics were triggered and the score breakdown.
-    -Configurable Sensitivity: Don't like the default settings? Open the settings panel directly from the popup to adjust the AI and Bot detection thresholds to your preference. Your settings are saved locally.
-    -Advanced Heuristic Engine: The extension's detection engine is built on principles from modern AI detection methodologies.
-
-## How It Works: The Detection Engine
-
-The extension analyzes content using a multi-layered heuristic engine inspired by professional detection tools.
-
-    -Stylometry & Linguistic Fingerprinting: The extension analyzes the author's writing style. It looks for an overly formal tone, a lack of common contractions, and an objective, encyclopedic voice that often lacks personal opinion or experience.
-    -Burstiness & Variation: Human writing has a natural rhythm with varying sentence lengths. The extension measures this "burstiness." AI-generated text often has a uniform, consistent sentence structure, which results in a low burstiness score.
-    -Paraphrase Shield: To combat users who use tools to rephrase AI content, the extension includes a heuristic that detects the "anomalous use of synonyms". It flags text that uses an unnaturally high number of complex words where simpler ones would suffice—a key trait of paraphrased content.
-    -Bot & Spam Heuristics: The extension also runs checks for classic bot indicators, including suspicious username patterns (e.g., Word-Word1234) and links to known spam domains.
 
 ## Installation
 
-### Firefox
+## 1) Clone the repository
 
-#### Option A — Install as a Temporary Extension (for testing / no account required)
+```bash
+git clone https://github.com/RootThePlanet/Redd-Eye.git
+cd Redd-Eye
+```
 
-1. Download or clone this repository and locate the `firefox-extension/` folder.
-2. Open Firefox and navigate to `about:debugging`.
-3. Click **"This Firefox"** in the left sidebar.
-4. Click **"Load Temporary Add-on…"**.
-5. Browse to the `firefox-extension/` folder and select the `manifest.json` file.
-6. The extension is now active. It will remain loaded until you restart Firefox.
+## 2) Install in Chrome (unpacked)
 
-#### Option B — Pack and Install as a Signed Extension (self-distribution)
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode**.
+3. Click **Load unpacked**.
+4. Select: `chrome-extension/`
+5. Open Reddit and start browsing; Redd-Eye activates on supported Reddit pages.
 
-1. Ensure you have [Node.js](https://nodejs.org) and [`web-ext`](https://github.com/mozilla/web-ext) installed:
-   ```
-   npm install --global web-ext
-   ```
-2. From the `firefox-extension/` directory, run:
-   ```
-   web-ext build
-   ```
-   This creates a `.zip` file in `firefox-extension/web-ext-artifacts/`.
-3. In Firefox, go to `about:addons` → click the gear icon → **"Install Add-on From File…"** and select the generated `.zip`.
-   > **Note:** Firefox requires extensions to be signed by Mozilla for permanent installation outside of Developer Edition / Nightly. Use [about:debugging](#option-a) for unsigned local testing.
+## 3) Install in Firefox (temporary load)
 
-### Chrome
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on**.
+3. Select: `firefox-extension/manifest.json`
+4. Browse Reddit and verify highlights/tooltips appear.
 
-#### Option A — Install as an Unpacked Extension (for testing / no account required)
+> Temporary Firefox installs are removed when Firefox restarts. For distribution builds, package/sign with Mozilla tooling.
 
-1. Download or clone this repository and locate the `chrome-extension/` folder.
-2. Open Chrome and navigate to `chrome://extensions`.
-3. Enable **"Developer mode"** using the toggle in the top-right corner.
-4. Click **"Load unpacked"**.
-5. Browse to and select the `chrome-extension/` folder.
-6. The extension is now active.
+## Optional: Build a Firefox package
 
-## Usage Guide
+```bash
+npm install --global web-ext
+cd firefox-extension
+web-ext build
+```
 
-    Reading the Highlights:
-        -Light Blue Dashed Outline = Low Confidence AI content.
-        -Medium Blue Dashed Outline = Medium Confidence AI content.
-        -Dark Blue Solid Outline = High Confidence AI content.
-        -Purple Dashed Outline = Flagged as both Bot & AI.
-        -Orange Username = Indicates a suspected bot account.
+The generated archive appears under `firefox-extension/web-ext-artifacts/`.
 
-    Viewing Details:
-        -Hover your mouse over any highlighted comment to see a detailed tooltip with the exact scores and the reasons for the flag.
-        -Click the popup in the top-right corner to see a list of all detected items on the page.
+## Usage
 
-    Adjusting Settings:
-        -Click the ⚙️ gear icon in the popup to open the settings panel.
-        -Change the threshold values and click "Save". Higher numbers make the extension less sensitive.
-        -Your settings are persisted via browser.storage.local and survive browser restarts.
+- **Read highlight strength:** stronger styling indicates higher confidence.
+- **Hover flagged content:** see exactly why it was flagged.
+- **Adjust thresholds:** use the popup settings to tune false-positive/false-negative balance.
+- **Review both content and accounts:** Redd-Eye is designed to evaluate text and author signals together.
 
-## Configuration
+## Default Thresholds
 
-The detection thresholds for both AI and Bot scoring are configurable via the UI. The default values are:
+- **AI threshold:** `2.5`
+- **Bot threshold:** `2.9`
 
-    AI Threshold: 2.5
-    Bot Threshold: 2.9
-
-Your custom settings are saved in your browser's local storage and will persist across sessions.
-
-
-
+These values can be changed at runtime from the extension settings panel.
