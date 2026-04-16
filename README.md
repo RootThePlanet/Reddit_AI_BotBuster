@@ -15,6 +15,8 @@
 
 Redd-Eye is a browser extension for Reddit that flags content likely to be AI-generated and highlights accounts that match common bot behavior patterns. It runs while you browse, scans posts/comments in real time, and gives you transparent score-based indicators so you can quickly judge credibility.
 
+![Redd-Eye Promo](assets/promo/promo2.png)
+
 > Chrome Web Store and Firefox Add-ons store listings are **incoming**. Until then, use local developer installation.
 
 ## What Redd-Eye Does
