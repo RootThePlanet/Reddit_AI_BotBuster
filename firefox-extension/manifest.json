@@ -7,7 +7,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "redd-eye@roottheplanet",
-      "strict_min_version": "109.0",
+      "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": ["none"]
       }
