@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Redd-Eye (Reddit AI & Bot Detection)",
   "description": "Detect suspected bot accounts and AI-generated Reddit content with advanced heuristics on www.reddit.com and old.reddit.com.",
-  "version": "5.1.1",
+  "version": "5.2.0",
   "permissions": ["storage"],
   "icons": {
     "16": "icons/icon-16.png",
