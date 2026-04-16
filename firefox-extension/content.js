@@ -1,6 +1,6 @@
 /*
  Redd-Eye – Firefox WebExtension content script.
- Version 5.1.0 – Supports both www.reddit.com and old.reddit.com.
+ Version 5.2.0 – Supports both www.reddit.com and old.reddit.com.
  */
 
 (function() {
@@ -1026,8 +1026,8 @@
             const aiVal  = Math.max(0.1, parseFloat(aiThresholdInput.value) || DEFAULT_AI_THRESHOLD);
             const botVal = Math.max(0.1, parseFloat(botThresholdInput.value) || DEFAULT_BOT_THRESHOLD);
             saveSettings(aiVal, botVal);
-            saveSettingsBtn.innerText = "Saved!";
-            setTimeout(() => { saveSettingsBtn.innerText = "Save"; }, 1500);
+            saveSettingsBtn.textContent = "Saved!";
+            setTimeout(() => { saveSettingsBtn.textContent = "Save"; }, 1500);
         });
 
         document.body.addEventListener('mouseover', e => {
